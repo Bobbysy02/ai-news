@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>每日 AI 新闻 · 时事热点</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --blue: #2563eb;
+    --blue-soft: #eff6ff;
+    --gray-tag: #f3f4f6;
+    --orange: #f97316;
+    --red: #ef4444;
+    --purple: #8b5cf6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 20px 16px 60px; }
+
+  header { padding: 18px 0 16px; }
+  header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+  header .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .badge-update {
+    display: inline-block; background: var(--gray-tag); color: var(--muted);
+    padding: 2px 10px; border-radius: 20px; font-size: 12px; margin-top: 8px;
+  }
+
+  /* 顶部大类切换 */
+  .top-tabs {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; gap: 6px; background: var(--bg);
+    padding: 10px 0; border-bottom: 1px solid var(--line); margin-bottom: 20px;
+  }
+  .top-tabs button {
+    border: none; background: var(--card); color: var(--muted);
+    padding: 9px 20px; border-radius: 20px; cursor: pointer; font-size: 15px;
+    font-weight: 500; border: 1px solid var(--line); transition: all .15s;
+  }
+  .top-tabs button.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .top-tabs button:hover { border-color: var(--blue); color: var(--blue); }
+  .top-tabs button.active:hover { color: #fff; }
+
+  .sec { display: none; }
+  .sec.active { display: block; }
+
+  .section-title {
+    font-size: 18px; font-weight: 700; margin: 8px 0 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-title::before { content: ""; width: 4px; height: 18px; background: var(--blue); border-radius: 2px; }
+
+  .filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filters button {
+    border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    padding: 6px 16px; border-radius: 20px; cursor: pointer; font-size: 13px; transition: all .15s;
+  }
+  .filters button.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+
+  /* 温度计 */
+  .thermo {
+    position: relative; width: 9px; height: 30px; flex-shrink: 0;
+    background: #f1f5f9; border: 1px solid #d1d5db; border-radius: 5px;
+    margin-bottom: 8px;
+  }
+  .thermo .fill {
+    position: absolute; bottom: 0; left: 0; right: 0; border-radius: 4px;
+    height: var(--h); background: var(--c);
+  }
+  .thermo::after {
+    content: ""; position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
+    width: 15px; height: 15px; border-radius: 50%; background: var(--c);
+    border: 1px solid #d1d5db;
+  }
+  .heat-num { font-size: 11px; color: var(--muted); text-align: center; width: 9px; margin-top: 10px; }
+
+  .news-list { list-style: none; }
+  .news-list li {
+    padding: 12px 18px; border-bottom: 1px solid var(--line);
+    display: flex; gap: 12px; align-items: center;
+  }
+  .news-list li:last-child { border-bottom: none; }
+  .news-list a { color: var(--text); text-decoration: none; flex: 1; }
+  .news-list a:hover { color: var(--blue); }
+  .news-list .title { font-size: 14px; }
+  .meta { display: flex; gap: 8px; align-items: center; margin-top: 3px; flex-wrap: wrap; }
+  .tag { font-size: 11px; padding: 1px 8px; border-radius: 4px; white-space: nowrap; }
+  .tag.official { background: var(--blue-soft); color: var(--blue); font-weight: 600; }
+  .tag.media { background: var(--gray-tag); color: var(--muted); }
+  .tag.community { background: #f3e8ff; color: #7c3aed; }
+  .tag.time { background: none; color: var(--muted); padding-left: 0; }
+
+  .hot-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .hot-tabs button {
+    border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    padding: 7px 18px; border-radius: 20px; cursor: pointer; font-size: 14px;
+  }
+  .hot-tabs button.active { background: #111827; color: #fff; border-color: #111827; }
+
+  .hot-list { list-style: none; }
+  .hot-list li {
+    display: flex; align-items: center; gap: 12px; padding: 11px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .hot-list li:last-child { border-bottom: none; }
+  .rank {
+    width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center;
+    justify-content: center; font-size: 13px; font-weight: 700; background: var(--gray-tag);
+    color: var(--muted); flex-shrink: 0;
+  }
+  .hot-list li:nth-child(1) .rank { background: #fef2f2; color: var(--red); }
+  .hot-list li:nth-child(2) .rank { background: #fff7ed; color: #ea580c; }
+  .hot-list li:nth-child(3) .rank { background: #fffbeb; color: #d97706; }
+  .hot-list a { color: var(--text); text-decoration: none; flex: 1; font-size: 14px; }
+  .hot-list a:hover { color: var(--blue); }
+
+  .bili-list { list-style: none; }
+  .bili-list li {
+    display: flex; align-items: center; gap: 12px; padding: 11px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .bili-list li:last-child { border-bottom: none; }
+  .bili-list a { color: var(--text); text-decoration: none; flex: 1; font-size: 14px; }
+  .bili-list a:hover { color: var(--blue); }
+  .bili-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  .empty { padding: 40px; text-align: center; color: var(--muted); font-size: 14px; }
+  footer { text-align: center; color: #9ca3af; font-size: 12px; margin-top: 40px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>每日 AI 新闻 · 时事热点</h1>
+    <div class="sub">AI 巨头官方动态 + 权威媒体报道 + 全网实时热点，按热度排序</div>
+    <span class="badge-update" id="updateTime">更新时间：加载中…</span>
+  </header>
+
+  <!-- 顶部大类切换 -->
+  <nav class="top-tabs" id="topTabs">
+    <button data-sec="sec-ai" class="active">AI 新闻</button>
+    <button data-sec="sec-hot">时事热点</button>
+    <button data-sec="sec-bili">B站视频</button>
+  </nav>
+
+  <!-- AI 新闻 -->
+  <section class="sec active" id="sec-ai">
+    <h2 class="section-title">AI 新闻</h2>
+    <div class="filters" id="aiFilters">
+      <button data-f="all" class="active">全部</button>
+      <button data-f="official">官方一手</button>
+      <button data-f="zh">中文</button>
+      <button data-f="weekly">每周热点</button>
+    </div>
+    <div class="card">
+      <ul class="news-list" id="newsList"></ul>
+      <div class="empty" id="newsEmpty" style="display:none">暂无符合条件的内容</div>
+    </div>
+  </section>
+
+  <!-- 时事热点 -->
+  <section class="sec" id="sec-hot">
+    <h2 class="section-title">时事热点</h2>
+    <div class="hot-tabs" id="hotTabs"></div>
+    <div class="card">
+      <ul class="hot-list" id="hotList"></ul>
+    </div>
+  </section>
+
+  <!-- B站视频 -->
+  <section class="sec" id="sec-bili">
+    <h2 class="section-title">B站热门视频</h2>
+    <div class="card">
+      <ul class="bili-list" id="biliList"></ul>
+    </div>
+  </section>
+
+  <footer>数据来源：OpenAI / Google / Microsoft / NVIDIA / MIT / Verge / Ars / 量子位 / InfoQ / 少数派 / 爱范儿 / 极客公园 / Hacker News 等 · 热点来自公开接口</footer>
+</div>
+
+<script src="data.js"></script>
+<script>
+  var DATA = window.DATA || { news: [], hot: {}, bilibili: [], updated: "" };
+  document.getElementById("updateTime").textContent = DATA.updated
+    ? "更新时间：" + DATA.updated : "尚未生成数据，请先运行抓取脚本";
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
+  }
+
+  // 热度颜色：橙 → 红 → 紫
+  function heatColor(h) {
+    if (h >= 75) return "#8b5cf6";
+    if (h >= 60) return "#ef4444";
+    if (h >= 45) return "#f97316";
+    return null;
+  }
+
+  // 温度计图标（低热度返回空，不显示）
+  function thermo(heat) {
+    var c = heatColor(heat);
+    if (!c) return "";
+    var h = Math.max(10, Math.min(100, heat));
+    return '<span class="thermo" style="--c:' + c + ';--h:' + h + '%"><span class="fill"></span></span>' +
+           '<span class="heat-num">' + heat + '</span>';
+  }
+
+  // ---------- 顶部大类切换 ----------
+  document.getElementById("topTabs").addEventListener("click", function (e) {
+    if (e.target.tagName !== "BUTTON") return;
+    var id = e.target.getAttribute("data-sec");
+    document.querySelectorAll(".sec").forEach(function (s) { s.classList.remove("active"); });
+    document.getElementById(id).classList.add("active");
+    this.querySelectorAll("button").forEach(function (b) { b.classList.remove("active"); });
+    e.target.classList.add("active");
+  });
+
+  // ---------- AI 新闻 ----------
+  var currentFilter = "all";
+  function renderNews() {
+    var list = document.getElementById("newsList");
+    var empty = document.getElementById("newsEmpty");
+
+    // 每周热点：渲染周榜数据（当天 Top20 / 持续热门）
+    if (currentFilter === "weekly") {
+      var weekly = DATA.weekly || [];
+      if (!weekly.length) { list.innerHTML = ""; empty.style.display = "block"; return; }
+      empty.style.display = "none";
+      list.innerHTML = weekly.map(function (n) {
+        var dayTag = n.days > 1
+          ? '<span class="tag community">持续 ' + n.days + " 天</span>"
+          : '<span class="tag community">今日</span>';
+        return '<li>' + thermo(n.heat) +
+          '<a href="' + n.url + '" target="_blank" rel="noopener">' +
+          '<div class="title">' + escapeHtml(n.title) + "</div>" +
+          '<div class="meta"><span class="tag media">' + escapeHtml(n.source) + "</span>" + dayTag + "</div>" +
+          "</a></li>";
+      }).join("");
+      return;
+    }
+
+    var items = DATA.news.filter(function (n) {
+      if (n.heat < 45) return false;
+      if (currentFilter === "official") return n.tier === "official";
+      if (currentFilter === "zh") return n.lang === "zh";
+      return true;
+    });
+    if (!items.length) { list.innerHTML = ""; empty.style.display = "block"; return; }
+    empty.style.display = "none";
+    list.innerHTML = items.map(function (n) {
+      var tag = n.tier === "official"
+        ? '<span class="tag official">官方</span>'
+        : n.tier === "community"
+          ? '<span class="tag community">社区热门</span>'
+          : '<span class="tag media">媒体</span>';
+      var time = n.time ? '<span class="tag time">' + n.time + "</span>" : "";
+      var extra = n.points ? '<span class="tag time">' + n.points + " 赞 · " + (n.comments || 0) + " 评论</span>" : "";
+      return '<li>' + thermo(n.heat) +
+        '<a href="' + n.url + '" target="_blank" rel="noopener">' +
+        '<div class="title">' + escapeHtml(n.title) + "</div>" +
+        '<div class="meta">' + tag + '<span class="tag media">' + escapeHtml(n.source) + "</span>" + time + extra + "</div>" +
+        "</a></li>";
+    }).join("");
+  }
+  document.getElementById("aiFilters").addEventListener("click", function (e) {
+    if (e.target.tagName !== "BUTTON") return;
+    currentFilter = e.target.getAttribute("data-f");
+    this.querySelectorAll("button").forEach(function (b) { b.classList.remove("active"); });
+    e.target.classList.add("active");
+    renderNews();
+  });
+  renderNews();
+
+  // ---------- 时事热点 ----------
+  var platforms = Object.keys(DATA.hot);
+  var currentPlatform = platforms[0];
+  function renderTabs() {
+    document.getElementById("hotTabs").innerHTML = platforms.map(function (p) {
+      var short = p.replace("热搜", "").replace("热榜", "");
+      return '<button data-p="' + p + '"' + (p === currentPlatform ? ' class="active"' : "") + ">" + short + "</button>";
+    }).join("");
+  }
+  function renderHot() {
+    var list = document.getElementById("hotList");
+    var items = DATA.hot[currentPlatform] || [];
+    list.innerHTML = items.map(function (it, i) {
+      return '<li><span class="rank">' + (i + 1) + "</span>" +
+        '<a href="' + it.url + '" target="_blank" rel="noopener">' + escapeHtml(it.title) + "</a></li>";
+    }).join("");
+  }
+  document.getElementById("hotTabs").addEventListener("click", function (e) {
+    if (e.target.tagName !== "BUTTON") return;
+    currentPlatform = e.target.getAttribute("data-p");
+    renderTabs();
+    renderHot();
+  });
+  if (platforms.length) { renderTabs(); renderHot(); }
+
+  // ---------- B站热门视频 ----------
+  function renderBili() {
+    var list = document.getElementById("biliList");
+    var items = DATA.bilibili || [];
+    list.innerHTML = items.map(function (v, i) {
+      return '<li><span class="rank">' + (i + 1) + "</span>" +
+        '<a href="' + v.url + '" target="_blank" rel="noopener">' + escapeHtml(v.title) + "</a>" +
+        '<span class="bili-meta">' + escapeHtml(v.up) + " · " + v.play + " 播放</span></li>";
+    }).join("");
+  }
+  renderBili();
+
+  // ---------- 每周热点已并入上方 aiFilters 的「每周热点」标签，由 renderNews 处理 ----------
+</script>
+</body>
+</html>
