@@ -64,6 +64,31 @@
   }
   .filters button.active { background: var(--blue); color: #fff; border-color: var(--blue); }
 
+  /* 筛选行 + 右侧排序控件 */
+  .filter-row {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 16px;
+  }
+  .filter-row .filters { margin-bottom: 0; }
+  .sort-box { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .sort-box label { font-size: 12px; color: var(--muted); }
+  .sort-box select {
+    border: 1px solid var(--line); background: var(--card); color: var(--text);
+    padding: 6px 10px; border-radius: 8px; font-size: 13px; cursor: pointer;
+    outline: none; font-family: inherit;
+  }
+  .sort-box select:hover { border-color: var(--blue); color: var(--blue); }
+
+  /* 英文条目的中文附注（不截断，避免出现省略号） */
+  .brief {
+    font-size: 12.5px; color: #6b7280; line-height: 1.55; margin-top: 4px;
+  }
+  .brief::before { content: "译 "; color: #9ca3af; font-size: 11px; }
+  .brief.sum::before { content: "摘要 "; }
+
+  /* 板块说明 */
+  .sub-note { font-size: 12px; color: var(--muted); margin: -8px 0 12px; }
+
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
 
   /* 温度计 */
@@ -120,8 +145,11 @@
   .hot-list li:nth-child(1) .rank { background: #fef2f2; color: var(--red); }
   .hot-list li:nth-child(2) .rank { background: #fff7ed; color: #ea580c; }
   .hot-list li:nth-child(3) .rank { background: #fffbeb; color: #d97706; }
-  .hot-list a { color: var(--text); text-decoration: none; flex: 1; font-size: 14px; }
+  .hot-list a { color: var(--text); text-decoration: none; flex: 1; font-size: 14px; word-break: break-word; }
   .hot-list a:hover { color: var(--blue); }
+  .hot-list a .desc {
+    font-size: 12px; color: #6b7280; margin-top: 3px; line-height: 1.5;
+  }
 
   .bili-list { list-style: none; }
   .bili-list li {
@@ -149,17 +177,29 @@
   <nav class="top-tabs" id="topTabs">
     <button data-sec="sec-ai" class="active">AI 新闻</button>
     <button data-sec="sec-hot">时事热点</button>
-    <button data-sec="sec-bili">B站视频</button>
+    <button data-sec="sec-finance">财经新闻</button>
+    <button data-sec="sec-sports">体育新闻</button>
+    <button data-sec="sec-politics">政治新闻</button>
   </nav>
 
   <!-- AI 新闻 -->
   <section class="sec active" id="sec-ai">
     <h2 class="section-title">AI 新闻</h2>
-    <div class="filters" id="aiFilters">
-      <button data-f="all" class="active">全部</button>
-      <button data-f="official">官方一手</button>
-      <button data-f="zh">中文</button>
-      <button data-f="weekly">每周热点</button>
+    <div class="filter-row">
+      <div class="filters" id="aiFilters">
+        <button data-f="all" class="active">全部</button>
+        <button data-f="official">官方一手</button>
+        <button data-f="zh">中文</button>
+        <button data-f="community">国外社区</button>
+        <button data-f="weekly">每周热点</button>
+      </div>
+      <div class="sort-box">
+        <label for="sortSel">排序</label>
+        <select id="sortSel">
+          <option value="heat">按热度</option>
+          <option value="source">按来源</option>
+        </select>
+      </div>
     </div>
     <div class="card">
       <ul class="news-list" id="newsList"></ul>
@@ -176,20 +216,40 @@
     </div>
   </section>
 
-  <!-- B站视频 -->
-  <section class="sec" id="sec-bili">
-    <h2 class="section-title">B站热门视频</h2>
+  <!-- 财经新闻 -->
+  <section class="sec" id="sec-finance">
+    <h2 class="section-title">财经新闻</h2>
+    <div class="sub-note" id="finNote" style="display:none"></div>
+    <div class="hot-tabs" id="finTabs"></div>
     <div class="card">
-      <ul class="bili-list" id="biliList"></ul>
+      <ul class="hot-list" id="finList"></ul>
     </div>
   </section>
 
-  <footer>数据来源：OpenAI / Google / Microsoft / NVIDIA / MIT / Verge / Ars / 量子位 / InfoQ / 少数派 / 爱范儿 / 极客公园 / Hacker News 等 · 热点来自公开接口</footer>
+  <!-- 体育新闻 -->
+  <section class="sec" id="sec-sports">
+    <h2 class="section-title">体育新闻</h2>
+    <div class="card">
+      <ul class="hot-list" id="sportsList"></ul>
+    </div>
+  </section>
+
+  <!-- 政治新闻 -->
+  <section class="sec" id="sec-politics">
+    <h2 class="section-title">政治新闻</h2>
+    <div class="sub-note">政策文件均抓取自政府官网公开信息（国务院 / 发改委 / 证监会 / 省市），点击可查看原文</div>
+    <div class="hot-tabs" id="polTabs"></div>
+    <div class="card">
+      <ul class="hot-list" id="polList"></ul>
+    </div>
+  </section>
+
+  <footer>数据来源：OpenAI / Google / Microsoft / NVIDIA / Anthropic / Meta AI / IT之家 / 钛媒体 / 量子位 / InfoQ / Hacker News 等 · 热点来自公开接口 · 财经（华尔街见闻 / 财联社 / 东方财富 / 新浪财经）· 投行研报（东方财富研报中心，近 30 天）· 国际投行（Yahoo Finance / Google News）· 体育（新浪体育）· 政治（中国新闻网）</footer>
 </div>
 
 <script src="data.js"></script>
 <script>
-  var DATA = window.DATA || { news: [], hot: {}, bilibili: [], updated: "" };
+  var DATA = window.DATA || { news: [], hot: {}, finance: {}, sports: [], politics: {}, updated: "" };
   document.getElementById("updateTime").textContent = DATA.updated
     ? "更新时间：" + DATA.updated : "尚未生成数据，请先运行抓取脚本";
 
@@ -200,7 +260,7 @@
 
   // 热度颜色：橙 → 红 → 紫
   function heatColor(h) {
-    if (h >= 85) return "#8b5cf6";
+    if (h >= 90) return "#8b5cf6";
     if (h >= 75) return "#ef4444";
     if (h >= 60) return "#f97316";
     return null;
@@ -227,6 +287,42 @@
 
   // ---------- AI 新闻 ----------
   var currentFilter = "all";
+  var currentSort = "heat";
+  // 英文帖子统一显示中文极简摘要（页面上不再提供切换）
+  function briefHtml(n) {
+    if (!n.brief_sum) return "";
+    return '<div class="brief sum">' + escapeHtml(n.brief_sum) + "</div>";
+  }
+
+  // 按来源分组排序：组间按最高热度，组内按热度
+  function sortBySource(items) {
+    var groups = {}, order = [];
+    items.forEach(function (n) {
+      if (!groups[n.source]) { groups[n.source] = []; order.push(n.source); }
+      groups[n.source].push(n);
+    });
+    order.sort(function (a, b) { return groups[b][0].heat - groups[a][0].heat; });
+    var out = [];
+    order.forEach(function (s) { out = out.concat(groups[s]); });
+    return out;
+  }
+
+  function newsItemHtml(n) {
+    var tag = n.tier === "official"
+      ? '<span class="tag official">官方</span>'
+      : n.tier === "community"
+        ? '<span class="tag community">社区热门</span>'
+        : '<span class="tag media">媒体</span>';
+    var time = n.time ? '<span class="tag time">' + n.time + "</span>" : "";
+    var extra = n.points ? '<span class="tag time">' + n.points + " 赞 · " + (n.comments || 0) + " 评论</span>" : "";
+    var brief = briefHtml(n);
+    return '<li>' + thermo(n.heat) +
+      '<a href="' + n.url + '" target="_blank" rel="noopener">' +
+      '<div class="title">' + escapeHtml(n.title) + "</div>" + brief +
+      '<div class="meta">' + tag + '<span class="tag media">' + escapeHtml(n.source) + "</span>" + time + extra + "</div>" +
+      "</a></li>";
+  }
+
   function renderNews() {
     var list = document.getElementById("newsList");
     var empty = document.getElementById("newsEmpty");
@@ -253,30 +349,24 @@
       if (n.heat < 60) return false;
       if (currentFilter === "official") return n.tier === "official";
       if (currentFilter === "zh") return n.lang === "zh";
+      // 国外社区：既不是中文，也不是官方一手
+      if (currentFilter === "community") return n.lang !== "zh" && n.tier !== "official";
       return true;
     });
     if (!items.length) { list.innerHTML = ""; empty.style.display = "block"; return; }
     empty.style.display = "none";
-    list.innerHTML = items.map(function (n) {
-      var tag = n.tier === "official"
-        ? '<span class="tag official">官方</span>'
-        : n.tier === "community"
-          ? '<span class="tag community">社区热门</span>'
-          : '<span class="tag media">媒体</span>';
-      var time = n.time ? '<span class="tag time">' + n.time + "</span>" : "";
-      var extra = n.points ? '<span class="tag time">' + n.points + " 赞 · " + (n.comments || 0) + " 评论</span>" : "";
-      return '<li>' + thermo(n.heat) +
-        '<a href="' + n.url + '" target="_blank" rel="noopener">' +
-        '<div class="title">' + escapeHtml(n.title) + "</div>" +
-        '<div class="meta">' + tag + '<span class="tag media">' + escapeHtml(n.source) + "</span>" + time + extra + "</div>" +
-        "</a></li>";
-    }).join("");
+    if (currentSort === "source") items = sortBySource(items);
+    list.innerHTML = items.map(newsItemHtml).join("");
   }
   document.getElementById("aiFilters").addEventListener("click", function (e) {
     if (e.target.tagName !== "BUTTON") return;
     currentFilter = e.target.getAttribute("data-f");
     this.querySelectorAll("button").forEach(function (b) { b.classList.remove("active"); });
     e.target.classList.add("active");
+    renderNews();
+  });
+  document.getElementById("sortSel").addEventListener("change", function () {
+    currentSort = this.value;
     renderNews();
   });
   renderNews();
@@ -306,17 +396,82 @@
   });
   if (platforms.length) { renderTabs(); renderHot(); }
 
-  // ---------- B站热门视频 ----------
-  function renderBili() {
-    var list = document.getElementById("biliList");
-    var items = DATA.bilibili || [];
-    list.innerHTML = items.map(function (v, i) {
-      return '<li><span class="rank">' + (i + 1) + "</span>" +
-        '<a href="' + v.url + '" target="_blank" rel="noopener">' + escapeHtml(v.title) + "</a>" +
-        '<span class="bili-meta">' + escapeHtml(v.up) + " · " + v.play + " 播放</span></li>";
+  // ---------- 财经新闻 ----------
+  var finPlatforms = Object.keys(DATA.finance || {});
+  var currentFin = finPlatforms[0];
+  // 只有「国际投行」需要中文翻译，其余板块不显示任何附注
+  var FIN_NOTES = {
+    "国际投行": "近 30 天外资投行动态 · 英文条目下方为中文摘要"
+  };
+  function renderFinTabs() {
+    document.getElementById("finTabs").innerHTML = finPlatforms.map(function (p) {
+      return '<button data-p="' + p + '"' + (p === currentFin ? ' class="active"' : "") + ">" + p + "</button>";
     }).join("");
   }
-  renderBili();
+  function renderFin() {
+    var list = document.getElementById("finList");
+    var items = (DATA.finance || {})[currentFin] || [];
+    var isBank = currentFin === "国际投行";
+    var note = document.getElementById("finNote");
+    note.textContent = isBank ? FIN_NOTES["国际投行"] : "";
+    note.style.display = note.textContent ? "" : "none";
+    list.innerHTML = items.map(function (it, i) {
+      // 附注只在「国际投行」显示（那里是中文翻译），其他板块保持干净
+      var desc = isBank && it.desc && it.desc !== it.title
+        ? '<div class="desc">' + escapeHtml(it.desc) + "</div>" : "";
+      return '<li><span class="rank">' + (i + 1) + "</span>" +
+        '<a href="' + it.url + '" target="_blank" rel="noopener">' + escapeHtml(it.title) + desc + "</a>" +
+        (it.time ? '<span class="bili-meta">' + it.time + "</span>" : "") + "</li>";
+    }).join("");
+  }
+  document.getElementById("finTabs").addEventListener("click", function (e) {
+    if (e.target.tagName !== "BUTTON") return;
+    currentFin = e.target.getAttribute("data-p");
+    renderFinTabs();
+    renderFin();
+  });
+  if (finPlatforms.length) { renderFinTabs(); renderFin(); }
+
+  // ---------- 体育新闻 ----------
+  function renderSports() {
+    var list = document.getElementById("sportsList");
+    var items = DATA.sports || [];
+    list.innerHTML = items.map(function (it, i) {
+      return '<li><span class="rank">' + (i + 1) + "</span>" +
+        '<a href="' + it.url + '" target="_blank" rel="noopener">' + escapeHtml(it.title) + "</a>" +
+        (it.time ? '<span class="bili-meta">' + it.time + "</span>" : "") + "</li>";
+    }).join("");
+  }
+  renderSports();
+
+  // ---------- 政治新闻 ----------
+  var polTypes = Object.keys(DATA.politics || {});
+  var currentPol = polTypes[0];
+  function renderPolTabs() {
+    document.getElementById("polTabs").innerHTML = polTypes.map(function (p) {
+      return '<button data-p="' + p + '"' + (p === currentPol ? ' class="active"' : "") + ">" + p + "</button>";
+    }).join("");
+  }
+  function renderPol() {
+    var list = document.getElementById("polList");
+    var items = (DATA.politics || {})[currentPol] || [];
+    if (!items.length) {
+      list.innerHTML = '<li style="padding:16px 18px;color:#6b7280;font-size:13px">该栏目暂无内容</li>';
+      return;
+    }
+    list.innerHTML = items.map(function (it, i) {
+      return '<li><span class="rank">' + (i + 1) + "</span>" +
+        '<a href="' + it.url + '" target="_blank" rel="noopener">' + escapeHtml(it.title) + "</a>" +
+        (it.time ? '<span class="bili-meta">' + it.time + "</span>" : "") + "</li>";
+    }).join("");
+  }
+  document.getElementById("polTabs").addEventListener("click", function (e) {
+    if (e.target.tagName !== "BUTTON") return;
+    currentPol = e.target.getAttribute("data-p");
+    renderPolTabs();
+    renderPol();
+  });
+  if (polTypes.length) { renderPolTabs(); renderPol(); }
 
   // ---------- 每周热点已并入上方 aiFilters 的「每周热点」标签，由 renderNews 处理 ----------
 </script>
