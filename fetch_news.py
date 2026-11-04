@@ -19,7 +19,7 @@ UA = {
 }
 
 # 热度阈值：低于此值不展示（用户要求「热度低的不显示」）
-HEAT_THRESHOLD = 45
+HEAT_THRESHOLD = 60
 
 # ============================================================
 # 一、AI 新闻白名单源
@@ -98,19 +98,17 @@ def to_ts(struct):
 
 def calc_heat(item):
     """计算热度值 0-100：来源权重 + 新鲜度 + 重磅关键词 + 真实互动信号"""
-    tier_score = {"official": 72, "media": 55, "community": 46}.get(item.get("tier"), 50)
+    tier_score = {"official": 70, "media": 58, "community": 46}.get(item.get("tier"), 50)
 
-    # 新鲜度
+    # 新鲜度（按天：1天内+15 / 2天内+10 / 3天内+5 / 以上0）
     now = time.time()
     age_h = (now - item.get("ts", 0)) / 3600 if item.get("ts") else 999
-    if age_h <= 12:
-        freshness = 18
-    elif age_h <= 24:
-        freshness = 13
+    if age_h <= 24:
+        freshness = 15
+    elif age_h <= 48:
+        freshness = 10
     elif age_h <= 72:
-        freshness = 7
-    elif age_h <= 168:
-        freshness = 3
+        freshness = 5
     else:
         freshness = 0
 
@@ -118,12 +116,12 @@ def calc_heat(item):
     title = item.get("title", "")
     keyword_bonus = 10 if any(k in title for k in HOT_KEYWORDS) else 0
 
-    # 真实互动信号（Hacker News 的点数/评论数）
+    # 真实互动信号（仅 Hacker News 有点数/评论数）：点赞/50 + 评论/20，封顶 15
     points = item.get("points", 0)
     comments = item.get("comments", 0)
-    engage_bonus = min(20, points / 25 + comments / 40) if points else 0
+    engage_bonus = min(15, points / 50 + comments / 20) if (points or comments) else 0
 
-    heat = min(100, tier_score + freshness + keyword_bonus + engage_bonus)
+    heat = min(95, tier_score + freshness + keyword_bonus + engage_bonus)
     return int(round(heat))
 
 

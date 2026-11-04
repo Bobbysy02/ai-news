@@ -200,9 +200,9 @@
 
   // 热度颜色：橙 → 红 → 紫
   function heatColor(h) {
-    if (h >= 75) return "#8b5cf6";
-    if (h >= 60) return "#ef4444";
-    if (h >= 45) return "#f97316";
+    if (h >= 85) return "#8b5cf6";
+    if (h >= 75) return "#ef4444";
+    if (h >= 60) return "#f97316";
     return null;
   }
 
@@ -250,7 +250,7 @@
     }
 
     var items = DATA.news.filter(function (n) {
-      if (n.heat < 45) return false;
+      if (n.heat < 60) return false;
       if (currentFilter === "official") return n.tier === "official";
       if (currentFilter === "zh") return n.lang === "zh";
       return true;
