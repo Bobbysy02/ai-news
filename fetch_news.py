@@ -1571,8 +1571,19 @@ XHH_CONTENT_KW = ["盘点", "推荐", "测评", "评测", "攻略", "值得一�
 # 书名号可能是书/电影，必须再过一道游戏语境
 XHH_GAME_CTX = ["游戏", "玩家", "发售", "上线", "评测", "攻略", "3A", "主机", "Steam",
                 "DLC", "版本", "玩法", "单机", "联机", "关卡", "剧情", "开发", "厂商"]
-# 首页每次刷新内容完全不同，跑两轮能把候选池从 35 条翻到 60+
-XHH_ROUNDS = 2
+# 社区帖常直接写游戏绰号/译名，不带书名号也不含「发售」这类书面词，单列一批补召回。
+# 只放指向明确的专名，不放「游戏」「玩家」这类泛词，否则「舍友配主机该提刀还是提臀」也会被收进来
+XHH_GAME_ADD = ["PUBG", "绝地求生", "异人之下", "战术小队", "阿卡姆", "蝙蝠侠",
+                "彩虹六号", "塔科夫", "逃离塔科夫", "APEX", "暗区突围", "模拟人生",
+                "如龙", "女神异闻录", "激战2", "猛兽派对", "雾锁王国", "幻兽帕鲁",
+                "王国之泪", "机甲战魔", "潜行者", "剑星", "漫威刀锋战士"]
+# 赛事/厂商/研发三类专用词：都是「一看就是资讯」的词，避免用「决赛」「赛季」这类口语词
+XHH_ESPORTS_KW = ["S赛", "世界赛", "MSI", "Major", "LCK", "LPL", "KPL", "夺冠", "赛点"]
+XHH_INDUSTRY_KW = ["Unity", "Unreal", "Epic", "V社", "Valve", "销量", "营收", "收购",
+                   "裁员", "工作室", "引擎", "微软", "任天堂", "索尼", "财报"]
+XHH_PLAY_KW = ["攻略", "打法", "配装", "副本", "图鉴", "重制", "续作"]
+# 首页每次刷新内容完全不同，多跑几轮能把候选池翻倍；云端订阅制不用省这点时间
+XHH_ROUNDS = 3
 
 # 电竞筛选：LPL 只看世界赛，CS 只看大赛
 LOL_WORLD_KW = ["全球总决赛", "世界赛", "季中冠军赛", "MSI", "世界锦标赛", "S赛", "世界冠军"]
@@ -1785,19 +1796,31 @@ def fetch_games():
     # 小黑盒首页是实时信息流，没有时间字段，按当天算（否则列表里没有日期）
     now0 = int(time.time())
     n = 0
-    for it in fetch_xiaoheihe(limit=40):
+    xhh_all = fetch_xiaoheihe(limit=60)
+    dropped = []
+    for it in xhh_all:
         tt = it["title"]
+        # 社区帖大小写混用（steam / STEAM / Steam），统一转小写再比，否则小写的全漏
+        low = tt.lower()
         # 社区帖只有带书名号 / 发售词 / 平台评测词才算资讯，纯闲聊不进
-        hit_newsy = any(k in tt for k in XHH_NEWSY_KW)
-        hit_name = any(k in tt for k in XHH_GAME_NAMES)
-        hit_body = any(k in tt for k in XHH_CONTENT_KW)
+        hit_newsy = any(k.lower() in low for k in XHH_NEWSY_KW)
+        hit_name = any(k.lower() in low for k in XHH_GAME_NAMES + XHH_GAME_ADD)
+        hit_body = any(k.lower() in low for k in XHH_CONTENT_KW)
+        hit_esp = any(k.lower() in low for k in XHH_ESPORTS_KW)
+        hit_ind = any(k.lower() in low for k in XHH_INDUSTRY_KW)
+        hit_play = any(k.lower() in low for k in XHH_PLAY_KW)
         # 只有书名号时，还要带游戏语境，否则《查理九世》这类书评也会混进来
-        hit_book = "《" in tt and any(k in tt for k in XHH_GAME_CTX)
-        if not (hit_newsy or hit_name or hit_body or hit_book):
+        hit_book = "《" in tt and any(k.lower() in low for k in XHH_GAME_CTX)
+        if not (hit_newsy or hit_name or hit_body or hit_esp
+                or hit_ind or hit_play or hit_book):
+            dropped.append(tt)
             continue
         if add_hot(tt, it["url"], "小黑盒", now0, extra=XHH_KW + XHH_RELEASE_KW):
             n += 1
-    print(f"  [游戏] 小黑盒过滤后: {n} 条")
+    print(f"  [游戏] 小黑盒过滤后: {n} 条（候选 {len(xhh_all)}，剔除 {len(dropped)}）")
+    if dropped:
+        # 留几个样本，方便日后判断是规则太严还是源内容变了
+        print("  [游戏] 剔除样本: " + " / ".join(d[:16] for d in dropped[:6]))
 
     # 2) 机核 / 游研社 / 触乐
     for name, url in GAME_HOT_RSS:
