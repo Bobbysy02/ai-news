@@ -184,11 +184,16 @@ SPORT_CATS = [
               "奇才", "骑士", "猛龙", "公牛", "国王", "鹈鹕", "恩比德", "字母哥", "爱德华兹",
               "亚历山大", "莫兰特", "特雷杨", "哈登", "欧文", "布克", "锡安", "班凯罗",
               "布朗", "库明加", "申京", "奥萨尔", "篮板", "助攻", "三分", "Doncic",
-              "男篮", "女篮", "郭士强", "姚明", "易建联"]),
+              "男篮", "女篮", "郭士强", "姚明", "易建联",
+              # 「G联赛」是 NBA 发展联盟，不带这些会被足球的「联赛」抢走
+              "杨瀚森", "G联赛", "G联盟", "NBA发展联盟", "发展联盟", "夏季联赛",
+              "崔永熙", "曾凡博", "周琦", "余嘉豪", "林葳", "张镇麟", "胡明轩",
+              "赵睿", "赵继伟", "郭艾伦", "王哲林", "G League"]),
     ("足球", ["足球", "中超", "英超", "西甲", "意甲", "德甲", "法甲", "欧冠", "世界杯",
               "欧洲杯", "亚洲杯", "国足", "梅西", "C罗", "皇马", "巴萨", "曼联", "利物浦",
               "阿森纳", "拜仁", "尤文", "切尔西", "曼城", "热刺", "AC米兰", "国际米兰",
-              "点球", "红牌", "联赛", "杯赛", "进球", "多特蒙德", "贝蒂斯", "波尔图",
+              "点球", "红牌", "进球", "多特蒙德", "贝蒂斯", "波尔图",
+              "亚冠", "欧联杯", "欧协联", "世预赛", "足总杯", "联赛杯", "德国杯",
               "那不勒斯", "费内巴切", "莱比锡", "布莱顿", "阿森纳",
               "Liverpool", "Arsenal", "Chelsea", "Tottenham", "Everton", "Reds",
               "Real Madrid", "Barcelona", "Bayern", "Juventus", "PSG",
@@ -315,6 +320,14 @@ SPORTS_NOISE = ["竞彩", "彩票", "赔率", "盘口", "让球", "亚盘", "大
                 # 板球不在收录范围，别混进足球（橄榄球要保留，归综合）
                 "T20", "cricket", "Cricket", "wicket", "板球", "IPL", "ODI",
                 "Test match"]
+
+# 篮球以 NBA 与海外话题为主：CBS 的 NBA 频道是最稳的英文源（本地云端都通）
+NBA_RSS = [("CBS体育", "https://www.cbssports.com/rss/headlines/nba/")]
+NBA_NOISE = ["betting", "bet ", "odds", "promo", "parlay", "spread",
+             "bonus", "picks", "wagering", "如何下注"]
+
+# 篮球只关注 NBA 与海外话题；CBA 仅保留决赛、冠军这类关键节点
+CBA_KEEP = ["决赛", "总决赛", "冠军", "夺冠", "季后赛", "半决赛", "四强", "全明星", "夺冠"]
 
 # 小红书热搜（独立免费接口，uapis.cn）
 XHS_API = "https://uapis.cn/api/v1/misc/hotboard?type=xiaohongshu"
@@ -1157,12 +1170,16 @@ def fetch_sports():
     buckets = {"足球": [], "篮球": [], "赛车": [], "综合": []}
     seen, skipped = set(), 0
 
-    def add(title, url, source, ts=0, cat=None, summary=""):
+    def add(title, url, source, ts=0, cat=None, summary="", force_cat=False):
         nonlocal skipped
         title = clean(title)
         if not title or not url:
             return
         if any(k in title for k in SPORTS_NOISE):
+            skipped += 1
+            return
+        # CBA 常规赛 / 集训名单这类不进篮球栏，只保留决赛冠军节点
+        if "CBA" in title and not any(k in title for k in CBA_KEEP):
             skipped += 1
             return
         if title[:22] in seen:
@@ -1171,7 +1188,10 @@ def fetch_sports():
         # 标题关键词优先（天空体育的「足球」源里会混 F1、篮球），
         # 认不出来时才退回数据源自带的分类
         guess = _sport_cat(title)
-        c = guess if guess != "综合" or cat not in buckets else cat
+        if force_cat and cat in buckets:
+            c = cat
+        else:
+            c = guess if guess != "综合" or cat not in buckets else cat
         buckets[c].append({
             "title": title,
             "url": url,
@@ -1211,10 +1231,32 @@ def fetch_sports():
 
     # 3) 虎扑（中文战报与流言）
     for cat, board in HUPU_SPORTS:
-        got = _fetch_hupu_board(board, per=6)
+        got = _fetch_hupu_board(board, per=10 if board == "nba" else 8)
+        kept = 0
         for t, u in got:
+            # CBA 版块整版都是 CBA，只留决赛/冠军类话题
+            if board == "cba" and not any(k in t for k in CBA_KEEP):
+                continue
             add(t, u, "虎扑", 0, cat)
-        print(f"  [体育] 虎扑·{board}: {len(got)} 条")
+            kept += 1
+        print(f"  [体育] 虎扑·{board}: 抓 {len(got)} 条，留 {kept} 条")
+
+    # 4) NBA 英文源：CBA 不要、国内篮球也不要，篮球栏靠它撑住
+    for name, url in NBA_RSS:
+        try:
+            r = requests.get(url, headers=UA, timeout=18)
+            n = 0
+            for e in feedparser.parse(r.content).entries:
+                tt = clean(e.get("title", ""))
+                low = tt.lower()
+                if any(k in low for k in NBA_NOISE):
+                    continue
+                add(tt, e.get("link", ""), name, to_ts(e.get("published_parsed")),
+                    "篮球", clean(e.get("summary", ""))[:400], force_cat=True)
+                n += 1
+            print(f"  [体育] {name}·NBA: {n} 条")
+        except Exception as e:
+            print(f"  [体育] {name}·NBA: 失败 {str(e)[:40]}")
 
     # 各子栏目按来源轮转取样：虎扑的帖子没有时间戳，纯按时间排会被全部挤掉
     def pick_mixed(lst, cap=18):
@@ -1250,9 +1292,9 @@ def fetch_sports():
         allitems.extend(lst)
 
     # 「全部」按来源配额混合，避免某一个源把列表占满
-    quota = {"新浪体育": 18, "天空体育": 15, "虎扑": 12}
+    quota = {"新浪体育": 15, "天空体育": 14, "虎扑": 10, "CBS体育": 10}
     mix = []
-    for src in ("新浪体育", "天空体育", "虎扑"):
+    for src in ("新浪体育", "天空体育", "虎扑", "CBS体育"):
         mix.extend([x for x in allitems if x["source"] == src][:quota.get(src, 10)])
     mix.sort(key=lambda x: -(x.get("ts") or 0))
     # 赛果放最前：体育板块最该先看到的是「今天打完的结果」
@@ -1263,13 +1305,15 @@ def fetch_sports():
     done, n_tr = set(), 0
     for lst in result.values():
         for it in lst:
-            if it.get("source") != "天空体育" or it["url"] in done:
+            if it.get("source") not in ("天空体育", "CBS体育") or it["url"] in done:
                 continue
             done.add(it["url"])
             raw = it.pop("summary", "")
-            if not raw or n_tr >= 40:
+            if not raw or n_tr >= 60:
                 continue
-            cn = translate_qq(first_sentence(raw, 260) or it["title"], cache)
+            src = first_sentence(raw, 260) or it["title"]
+            # 腾讯在海外 IP 上不可达（云端就抓不到），所以必须再兜一层 Google
+            cn = translate_qq(src, cache) or translate(src, cache)
             if cn:
                 it["desc"] = truncate_cn(cn, 46, hard=60, ratio=0.7)
                 n_tr += 1
@@ -1294,6 +1338,49 @@ CMC_NEWS_API = ("https://apps.game.qq.com/cmc/zmMcnTargetContentList"
                 "?r0=json&page=1&num={num}&target={target}&source=web_pc&_=1")
 CMC_LOL_TARGET = 25
 LPL_NEWS_PAGE = "https://lpl.qq.com/es/news_detail.shtml?nid={docid}"
+
+
+def _fetch_hltv(per=12):
+    """HLTV 官方 RSS：CS 项目最权威的资讯源，英文标题 + 英文摘要
+
+    Cloudflare 对浏览器 UA 返回 403，只有非浏览器 UA 才放行（实测 curl UA=200）。
+    云端若被拦，函数返回空列表，不影响其他板块。
+    """
+    out = []
+    try:
+        r = None
+        # Cloudflare 对 UA 敏感，两个非浏览器 UA 依次试一次
+        for hdrs in (HLTV_HEADERS,
+                     {"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; "
+                                    "+http://www.google.com/bot.html)"}):
+            r = requests.get(HLTV_RSS, headers=hdrs, timeout=20)
+            if r.status_code == 200:
+                break
+        if r is None or r.status_code != 200:
+            print(f"  [游戏] HLTV: HTTP {getattr(r, 'status_code', '?')}"
+                  f"（被 Cloudflare 拦截，跳过，其他板块不受影响）")
+            return []
+        for e in feedparser.parse(r.content).entries:
+            title = clean(e.get("title", ""))
+            link = e.get("link", "")
+            if not title or not link:
+                continue
+            ts = to_ts(e.get("published_parsed"))
+            out.append({
+                "title": title[:90],
+                "url": link,
+                "source": "HLTV",
+                "summary": clean(e.get("summary", ""))[:260],
+                "time": time.strftime("%m-%d", time.localtime(ts)) if ts else "",
+                "ts": ts,
+            })
+    except Exception as e:
+        print(f"  [游戏] HLTV: 失败 {str(e)[:40]}")
+        return []
+    out.sort(key=lambda x: -(x["ts"] or 0))
+    out = out[:per]
+    print(f"  [游戏] HLTV: {len(out)} 条")
+    return out
 
 
 def _fetch_wanmei_cs(per=10):
@@ -1386,11 +1473,12 @@ def _launch_browser(p):
     return p.chromium.launch(headless=True)
 
 
-def fetch_xiaoheihe(limit=10):
-    """小黑盒社区首页。只在云端跑。
+def fetch_xiaoheihe(limit=60):
+    """小黑盒：首页 + 社区 + PC游戏话题，跑两轮合并去重
 
-    首页是 @heybox-spa 的空壳（3.8KB），接口还要 _rnd 签名，
-    静态请求一条都拿不到；只有真正执行 JS 才渲染得出来。
+    首页是 @heybox-spa 的空壳（3.8KB），接口要 _rnd 签名，静态请求一条都拿不到，
+    只有真正执行 JS 才渲染得出来。三个流内容互不重复，且每次刷新都会换一批，
+    所以跑两轮能把候选池从 35 条翻到 60 条以上。
     """
     if not PLAYWRIGHT_ENABLED:
         print("  [游戏] 小黑盒: 本地跳过（仅云端启用）")
@@ -1401,118 +1489,446 @@ def fetch_xiaoheihe(limit=10):
         print("  [游戏] 小黑盒: playwright 未安装，跳过")
         return []
 
-    out = []
+    sel = "a[href*='/app/bbs/link/']"
+    out, seen = [], set()
     try:
         with sync_playwright() as p:
             browser = _launch_browser(p)
             page = browser.new_page(locale="zh-CN",
                                     viewport={"width": 1440, "height": 900})
-            # 不用 networkidle：小黑盒有长连接，永远等不到 idle
-            page.goto(XHH_HOME, wait_until="domcontentloaded", timeout=45000)
-            page.wait_for_selector("a[href*='/app/bbs/link/']", timeout=20000)
-            for a in page.query_selector_all("a[href*='/app/bbs/link/']"):
-                el = a.query_selector(".bbs-content__title")
-                title = clean(el.inner_text()) if el else ""
-                href = a.get_attribute("href") or ""
-                if not title or not href:
-                    continue
-                out.append({
-                    "title": title[:80],
-                    "url": href if href.startswith("http") else "https://www.xiaoheihe.cn" + href,
-                    "source": "小黑盒",
-                    "time": "",
-                    "ts": 0,
-                })
+            for rnd in range(XHH_ROUNDS):
+                for url in XHH_FEEDS:
+                    try:
+                        # 不用 networkidle：小黑盒有长连接，永远等不到 idle
+                        page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                        page.wait_for_selector(sel, timeout=20000)
+                    except Exception:
+                        continue        # 单个流失败不影响其他流
+                    for a in page.query_selector_all(sel):
+                        el = a.query_selector(".bbs-content__title")
+                        title = clean(el.inner_text()) if el else ""
+                        href = a.get_attribute("href") or ""
+                        if not title or not href:
+                            continue
+                        full = href if href.startswith("http") else "https://www.xiaoheihe.cn" + href
+                        if full in seen:
+                            continue
+                        seen.add(full)
+                        out.append({
+                            "title": title[:80],
+                            "url": full,
+                            "source": "小黑盒",
+                            "time": "",
+                            "ts": 0,
+                        })
                 if len(out) >= limit:
                     break
             browser.close()
-        print(f"  [游戏] 小黑盒: {len(out)} 条")
     except Exception as e:
-        print(f"  [游戏] 小黑盒: 渲染失败 {str(e)[:60]}")
+        print(f"  [游戏] 小黑盒: 失败 {str(e)[:50]}")
+    print(f"  [游戏] 小黑盒: {len(out)} 条（{XHH_ROUNDS} 轮 × {len(XHH_FEEDS)} 个信息流去重）")
     return out
+
+
+
+GAME_TENCENT_BAN = ["王者荣耀", "瓦洛兰特", "无畏契约", "VALORANT", "金铲铲",
+                    "云顶之弈", "和平精英", "穿越火线", "元梦之星", "英雄联盟",
+                    "LPL", "KPL"]
+
+# 来源权重：小黑盒略高于游研社/游民星空，后者略高于机核/触乐
+GAME_SRC_WEIGHT = {"小黑盒": 100, "游研社": 95, "游民星空": 95, "机核": 85, "触乐": 85}
+# 每源进入「近期热门」的条数上限，避免一个源刷满一屏
+GAME_SRC_CAP = {"小黑盒": 12, "游民星空": 8, "机核": 8, "游研社": 6, "触乐": 6}
+# 社区帖很少写「发售/版本」这种书面词，补一批口语表达，只在收录小黑盒时放宽
+XHH_KW = ["通关", "喜加一", "史低", "打折", "联机", "开服", "内测", "试玩",
+          "卡池", "抽卡", "赛季", "攻略", "剧透", "预购", "炸服", "平衡性"]
+# 首页只有 10 条，再叠两个信息流（社区 / PC游戏话题）内容互不重复，合计约 37 条
+XHH_FEEDS = [
+    "https://www.xiaoheihe.cn/app/home",
+    "https://www.xiaoheihe.cn/app/bbs/home",
+    "https://www.xiaoheihe.cn/app/topic/link/1",
+]
+# 「近期热门」主要看新游发售与报道，命中这些词的小黑盒帖优先
+XHH_RELEASE_KW = ["发售", "上线", "定档", "预售", "预购", "抢先体验", "公测", "封测",
+                  "试玩", "新品节", "新作", "续作", "首曝", "公布", "上市", "开服",
+                  "发售日", "上线时间", "DLC", "资料片", "重制", "复刻", "评测"]
+# 社区帖大多是日记体闲聊，只有带书名号 / 发售词 / 平台评测词才算「资讯」
+XHH_NEWSY_KW = XHH_RELEASE_KW + [
+    "Steam", "PS5", "PS4", "Xbox", "Switch", "Epic", "任天堂", "索尼",
+    "IGN", "MC评分", "销量", "下架", "涨价", "史低", "打折", "喜加一",
+    "前作", "续作", "试玩版", "Demo", "补丁", "更新"]
+# 社区帖常只写游戏名、不加书名号，认这些名字
+XHH_GAME_NAMES = ["影之刃", "三角洲行动", "黑神话", "使命召唤", "战地", "塞尔达",
+                  "宝可梦", "最终幻想", "生化危机", "艾尔登法环", "只狼", "赛博朋克",
+                  "巫师", "上古卷轴", "辐射", "魔兽", "暗黑", "英雄联盟", "CS2",
+                  "无畏契约", "原神", "崩坏", "绝区零", "鸣潮", "明日方舟", "深空当铺",
+                  "死亡搁浅", "战神", "荒野大镖客", "我的世界", "泰拉瑞亚", "星露谷",
+                  "空洞骑士", "杀戮尖塔", "GTA", "COD", "文明", "刺客信条",
+                  "战锤", "星际争霸", "守望先锋", "Apex", "永劫无间", "剑星", "天国拯救"]
+# 盘点/推荐/攻略这类内容帖也算「报道」，纯日记体不算
+XHH_CONTENT_KW = ["盘点", "推荐", "测评", "评测", "攻略", "值得一试", "合集", "排行",
+                  "对比", "上手", "体验报告", "财报", "行业"]
+# 书名号可能是书/电影，必须再过一道游戏语境
+XHH_GAME_CTX = ["游戏", "玩家", "发售", "上线", "评测", "攻略", "3A", "主机", "Steam",
+                "DLC", "版本", "玩法", "单机", "联机", "关卡", "剧情", "开发", "厂商"]
+# 首页每次刷新内容完全不同，跑两轮能把候选池从 35 条翻到 60+
+XHH_ROUNDS = 2
+
+# 电竞筛选：LPL 只看世界赛，CS 只看大赛
+LOL_WORLD_KW = ["全球总决赛", "世界赛", "季中冠军赛", "MSI", "世界锦标赛", "S赛", "世界冠军"]
+# 虎扑习惯写「S16淘汰赛」而不是「全球总决赛」，用正则兜住 S10 之后的届次
+# 注意不能用 \b：中文也算 \w，S16 后面跟汉字时 \b 不成立
+LOL_WORLD_RE = re.compile(r"S1\d(?!\d)|(?<![A-Za-z])S[6-9](?!\d)")
+# 腾竞会发纯口号（「狭路相逢，勇者向前！」），没有任何赛事信号的不收录
+LOL_SIGNAL_KW = ["对阵", "赛程", "晋级", "挺进", "止步", "淘汰", "战胜", "击败", "比分",
+                 "夺冠", "加冕", "出线", "生死局", "MVP", "阵容", "首发", "决赛", "半决赛",
+                 "四强", "八强", "瑞士轮", "BLG", "TES", "IG", "JDG", "WBG", "LNG", "EDG",
+                 "RNG", "T1", "GEN", "DK", "HLE", "KT", "KDF", "BRO", "NS"]
+CS_MAJOR_KW = ["IEM", "BLAST", "PGL", "Major", "major", "ESL", "卡托维兹", "科隆",
+               "RMR", "冠军组", "传奇组", "挑战者组", "安特卫普", "里约", "哥本哈根",
+               "奥斯汀", "布达佩斯", "上海Major", "世界锦标赛"]
+CS_DOMESTIC_NOISE = ["PNL", "高校", "城市赛", "网吧", "网咖", "全民赛", "校园",
+                     "国服", "完美世界城市", "高校联赛", "CAC"]
+
+# 世界赛「对阵 / 结果」信号：真正的比赛信息才置顶
+LOL_WORLD_MATCH_KW = ["对阵", "赛程", "预告", "晋级", "挺进", "止步", "淘汰", "战胜",
+                      "击败", "扳倒", "比分", "夺冠", "加冕", "出线", "生死局",
+                      "BO3", "BO5", "bo3", "bo5", "3-0", "3-1", "3-2"]
+# 选手言论 / 返图不是赛果，不参与置顶
+LOL_COMMENT_NOISE = ["谈", "发文", "分享", "表示", "评论", "社媒", "直言", "回应",
+                     "采访", "晒", "认为", "觉得", "返图", "聚餐", "合照"]
+# 采访 / 花絮 / 活动招募不是赛事信息
+LOL_NOISE = ["MINITALK", "麦克疯", "TOP5", "观赛活动", "HELLO WORLDS", "中场时间",
+             "云顶之弈", "招募", "抽奖", "壁纸", "表情包", "海报", "宣传片",
+             "选手故事", "纪录片", "幕后", "生日快乐", "直播预告"]
+
+# HLTV：CS 项目最权威的资讯源（英文，需中文摘要）。
+# 注意：Cloudflare 会拦浏览器 UA，用非浏览器 UA 才拿得到 RSS（实测 curl UA 返回 200）
+HLTV_RSS = "https://www.hltv.org/rss/news"
+HLTV_HEADERS = {"User-Agent": "curl/8.4.0", "Accept": "application/rss+xml, */*"}
+# 翻译引擎不认识 CS 黑话，先把缩写展开成普通英文，译后再修一遍高频错译
+HLTV_PRE = [("compatriot", "fellow countryman"),
+            ("talent announced", "commentators announced")]
+HLTV_FIX = [("执行副总裁奖", "EVP 奖"), ("执行副总裁", "EVP"), ("最有价值球员", "MVP"),
+            ("球员", "选手"), ("奇幻游戏", "竞猜"), ("奇幻", "竞猜"),
+            ("赛点王牌", "赛点局"), ("咬大小件", "短讯合集"), ("点头", "入选"),
+            ("反恐精英新闻", "CS 新闻"), ("反恐精英", "CS")]
+# 固定栏目直接给中文说明，比机翻通顺
+HLTV_TITLE_DESC = {"Short news": "本周短讯合集：多条 CS 小新闻汇总"}
+
+# 电竞排序权重：官方大赛源 > 国际权威源 > 社区转载
+ESPORTS_SRC_WEIGHT = {"腾竞官方": 96, "HLTV": 94, "完美世界": 90,
+                      "英雄联盟": 82, "CS2": 80, "王者荣耀": 74, "PUBG": 72}
+
+
+def _fetch_gamersky(per=20):
+    """游民星空新闻列表（RSS 已关，只能解析 HTML；同页混有娱乐新闻，靠关键词过滤）"""
+    out, seen = [], set()
+    try:
+        r = requests.get("https://www.gamersky.com/news/", headers=UA, timeout=20)
+        r.encoding = "utf-8"
+        pat = r'<a[^>]+href="(https?://www\.gamersky\.com/news/(\d{6})/(\d+)\.shtml)"[^>]*>(.*?)</a>'
+        now = time.time()
+        for url, ym, aid, raw in re.findall(pat, r.text, re.S):
+            title = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", raw)).strip()
+            if len(title) < 8 or aid in seen:
+                continue
+            seen.add(aid)
+            # 列表本身按时间倒序，用位置倒推时间，让排序更符合直觉
+            ts = int(now) - len(out) * 900
+            out.append({
+                "title": title[:80],
+                "url": url,
+                "source": "游民星空",
+                "time": time.strftime("%m-%d", time.localtime(ts)),
+                "ts": ts,
+            })
+            if len(out) >= per * 3:
+                break
+    except Exception as e:
+        print(f"  [游戏] 游民星空: 失败 {str(e)[:40]}")
+    return out
+
+
+def _game_is_banned(title):
+    """腾讯系网游不列入「近期热门」（电竞板块另有入口）"""
+    low = title.lower()
+    return any(k.lower() in low for k in GAME_TENCENT_BAN)
+
+
+def _interleave_sources(items, max_run=2):
+    """按分数顺序重排，但同一来源不连续超过 max_run 条"""
+    pool, out = list(items), []
+    while pool:
+        pick = 0
+        for i, it in enumerate(pool):
+            if len(out) < max_run or any(x["source"] != it["source"] for x in out[-max_run:]):
+                pick = i
+                break
+        out.append(pool.pop(pick))
+    return out
+
+
+def _game_score(it, now_ts):
+    """排序依据：来源权重 + 时效热度 + 新游关键词，不对外展示分数"""
+    w = GAME_SRC_WEIGHT.get(it["source"], 80)
+    ts = it.get("ts") or now_ts
+    age_h = max(0.0, (now_ts - ts) / 3600.0)
+    rec = max(0.0, 8.0 - age_h * 0.4)
+    hot_b = 6.0 if any(k in it["title"] for k in GAME_HOT_KW) else 0.0
+    # 用户要求：小黑盒主要看新游发售与报道，命中的再加一档
+    if it["source"] == "小黑盒" and any(k in it["title"] for k in XHH_RELEASE_KW):
+        hot_b += 6.0
+    # 同权重下加一点确定性抖动，避免同类标题扎堆
+    jitter = (sum(ord(c) for c in it["title"][:12]) % 7) - 3
+    return w + rec + hot_b + jitter
+
+
+def _lol_is_world_match(title):
+    """世界赛的「对阵 / 结果」才置顶：选手言论、返图、花絮都排除"""
+    if not any(k in title for k in LOL_WORLD_KW) and not LOL_WORLD_RE.search(title):
+        return False
+    if any(k in title for k in LOL_COMMENT_NOISE):
+        return False
+    return any(k in title for k in LOL_WORLD_MATCH_KW)
+
+
+# 电竞标签：项目 + 来源 + 赛事，一眼能看出这是什么新闻
+ESPORTS_GAME_TAG = {
+    "腾竞官方": "LOL", "英雄联盟": "LOL",
+    "HLTV": "CS", "完美世界": "CS", "CS2": "CS",
+    "王者荣耀": "王者荣耀", "PUBG": "PUBG",
+}
+ESPORTS_PLATFORM_TAG = {
+    "腾竞官方": "腾竞官方", "HLTV": "HLTV", "完美世界": "完美世界",
+    "英雄联盟": "虎扑", "CS2": "虎扑", "王者荣耀": "虎扑", "PUBG": "虎扑",
+}
+CS_EVENT_TAGS = [("Major", ["Major", "major", "RMR"]), ("IEM", ["IEM"]),
+                 ("BLAST", ["BLAST"]), ("PGL", ["PGL"]),
+                 ("ESL", ["ESL", "卡托维兹", "科隆"]),
+                 ("世界锦标赛", ["世界锦标赛", "World Championship"])]
+
+
+def _esports_tags(it):
+    """给电竞条目打标签：项目 / 来源 / 赛事"""
+    src, title = it["source"], it["title"]
+    game = ESPORTS_GAME_TAG.get(src, "电竞")
+    tags = [game]
+    plat = ESPORTS_PLATFORM_TAG.get(src)
+    if plat:
+        tags.append(plat)
+    if game == "CS":
+        for name, kws in CS_EVENT_TAGS:
+            if any(k in title for k in kws):
+                tags.append(name)
+                break
+    elif game == "LOL":
+        if any(k in title for k in LOL_WORLD_KW) or LOL_WORLD_RE.search(title):
+            tags.append("世界赛")
+        else:
+            tags.append("LPL")
+    elif game == "王者荣耀":
+        tags.append("KPL")
+    elif game == "PUBG":
+        for name in ("PGC", "PCL", "PWS"):
+            if name in title:
+                tags.append(name)
+                break
+    return tags
+
+
+def _esports_score(it, now_ts):
+    """电竞内部排序：来源权重 + 时效 + 大赛关键词，分数不对外展示"""
+    w = ESPORTS_SRC_WEIGHT.get(it["source"], 75)
+    ts = it.get("ts") or 0
+    # 没有时间戳（虎扑帖子）不享受时效加成，否则会被当成刚发布而刷屏
+    age_h = max(0.0, (now_ts - ts) / 3600.0) if ts else 999.0
+    rec = max(0.0, 10.0 - age_h * 0.25)      # 40 小时衰减到 0
+    big = 6.0 if any(k in it["title"] for k in CS_MAJOR_KW) else 0.0
+    jitter = (sum(ord(c) for c in it["title"][:12]) % 7) - 3
+    return w + rec + big + jitter
 
 
 def fetch_games():
     """游戏资讯：近期热门（小黑盒 + 游戏媒体 RSS）+ 电竞资讯（腾竞 / 完美世界 / 虎扑）"""
     hot, esports, seen = [], [], set()
 
-    # 1) 小黑盒：社区首页（云端才跑），作为「近期热门」的头条来源
-    xhh = []
-    for it in fetch_xiaoheihe(limit=10):
-        t = it["title"]
-        # 社区帖什么都有，只留和游戏相关的
-        if "《" not in t and not any(k.lower() in t.lower() for k in GAME_KW):
-            continue
-        if t[:22] in seen:
-            continue
-        seen.add(t[:22])
-        xhh.append(it)
-    print(f"  [游戏] 小黑盒过滤后: {len(xhh)} 条")
+    src_used = {}
 
-    # 2) 近期热门：机核 / 游研社 / 触乐
+    def add_hot(title, url, source, ts=0, strict=False, extra=None):
+        if not title or not url or title[:22] in seen:
+            return False
+        if _game_is_banned(title):
+            return False
+        # 会员抽奖 / 福利帖不是新闻
+        if "抽奖" in title:
+            return False
+        pool = GAME_KW + (extra or [])
+        hit = any(k.lower() in title.lower() for k in pool)
+        # 严格模式必须命中游戏词：游民星空同页混着影视娱乐，书名号不可靠
+        if not hit and (strict or "《" not in title):
+            return False
+        if src_used.get(source, 0) >= GAME_SRC_CAP.get(source, 8):
+            return False
+        src_used[source] = src_used.get(source, 0) + 1
+        seen.add(title[:22])
+        hot.append({
+            "title": title,
+            "url": url,
+            "source": source,
+            "time": time.strftime("%m-%d", time.localtime(ts)) if ts else "",
+            "ts": ts,
+        })
+        return True
+
+    # 1) 小黑盒：社区首页（云端才跑），权重最高
+    # 小黑盒首页是实时信息流，没有时间字段，按当天算（否则列表里没有日期）
+    now0 = int(time.time())
+    n = 0
+    for it in fetch_xiaoheihe(limit=40):
+        tt = it["title"]
+        # 社区帖只有带书名号 / 发售词 / 平台评测词才算资讯，纯闲聊不进
+        hit_newsy = any(k in tt for k in XHH_NEWSY_KW)
+        hit_name = any(k in tt for k in XHH_GAME_NAMES)
+        hit_body = any(k in tt for k in XHH_CONTENT_KW)
+        # 只有书名号时，还要带游戏语境，否则《查理九世》这类书评也会混进来
+        hit_book = "《" in tt and any(k in tt for k in XHH_GAME_CTX)
+        if not (hit_newsy or hit_name or hit_body or hit_book):
+            continue
+        if add_hot(tt, it["url"], "小黑盒", now0, extra=XHH_KW + XHH_RELEASE_KW):
+            n += 1
+    print(f"  [游戏] 小黑盒过滤后: {n} 条")
+
+    # 2) 机核 / 游研社 / 触乐
     for name, url in GAME_HOT_RSS:
         try:
             r = requests.get(url, headers=UA, timeout=20)
-            n = 0
+            k = 0
             for e in feedparser.parse(r.content).entries:
-                title = clean(e.get("title", ""))
-                link = e.get("link", "")
-                if not title or not link or title[:22] in seen:
-                    continue
-                # 机核/触乐也发播客、访谈等非游戏内容，这里只留游戏相关
-                if "《" not in title and not any(k.lower() in title.lower() for k in GAME_KW):
-                    continue
-                seen.add(title[:22])
                 ts = to_ts(e.get("published_parsed"))
-                hot.append({
-                    "title": title,
-                    "url": link,
-                    "source": name,
-                    "time": time.strftime("%m-%d", time.localtime(ts)) if ts else "",
-                    "ts": ts,
-                })
-                n += 1
-            print(f"  [游戏] {name}: {n} 条")
+                if add_hot(clean(e.get("title", "")), e.get("link", ""), name, ts):
+                    k += 1
+            print(f"  [游戏] {name}: {k} 条")
         except Exception as e:
             print(f"  [游戏] {name}: 失败 {str(e)[:40]}")
 
-    # 2) 电竞资讯：官方渠道优先（腾竞 LoL / 完美世界 CS2），再补虎扑各版块
-    for fn, label in ((_fetch_lpl_news, "腾竞官方·英雄联盟"), (_fetch_wanmei_cs, "完美世界·CS2")):
-        got = fn(per=10)
-        n = 0
-        for it in got:
-            if it["title"][:22] in seen:
-                continue
-            seen.add(it["title"][:22])
-            esports.append(it)
-            n += 1
-        print(f"  [游戏] 电竞·{label}: {n} 条")
+    # 3) 游民星空（HTML 列表，同页混娱乐新闻，靠关键词过滤）
+    k = sum(1 for it in _fetch_gamersky(per=20)
+            if add_hot(it["title"], it["url"], "游民星空", it.get("ts") or 0, strict=True))
+    print(f"  [游戏] 游民星空: {k} 条")
+
+    # 4) 电竞资讯
+    #    腾竞官方：世界赛的「对阵 / 结果」置顶，其余按 LPL 常规话题参与热度排序
+    worlds, n_lpl = [], 0
+    for it in _fetch_lpl_news(per=20):
+        tt = it["title"]
+        if any(k in tt for k in LOL_NOISE):
+            continue
+        # 没有任何赛事信号的纯口号不收
+        if not any(k in tt for k in LOL_SIGNAL_KW) and not LOL_WORLD_RE.search(tt):
+            continue
+        if tt[:22] in seen:
+            continue
+        seen.add(tt[:22])
+        if _lol_is_world_match(tt):
+            worlds.append(it)           # 世界赛对阵 / 结果 → 置顶
+        else:
+            esports.append(it)          # LPL 常规话题，混进热度池
+            n_lpl += 1
+    print(f"  [游戏] 电竞·腾竞：世界赛置顶 {len(worlds)} 条 / LPL {n_lpl} 条")
+
+    #    CS2：HLTV（国际权威）+ 完美世界 + 虎扑混在一起，按热度排
+    cs_n = 0
+    for it in _fetch_hltv(per=12):
+        if it["title"][:22] in seen:
+            continue
+        seen.add(it["title"][:22])
+        esports.append(it)              # 带 summary，循环末尾统一翻译
+        cs_n += 1
+
+    #    完美世界只留 IEM / BLAST / PGL / Major 这类大赛，国内校园赛、城市赛全剔
+    for it in _fetch_wanmei_cs(per=15):
+        tt = it["title"]
+        if not any(k in tt for k in CS_MAJOR_KW):
+            continue
+        if any(n.lower() in tt.lower() for n in CS_DOMESTIC_NOISE):
+            continue
+        if tt[:22] in seen:
+            continue
+        seen.add(tt[:22])
+        esports.append(it)
+        cs_n += 1
+    print(f"  [游戏] 电竞·CS2（HLTV + 完美世界）: {cs_n} 条")
 
     for game, board in GAME_ESPORTS_BOARDS:
-        got = _fetch_hupu_board(board, per=8)
+        got = _fetch_hupu_board(board, per=10)
         n = 0
-        for t, u in got:
-            if t[:22] in seen:
+        for tt, u in got:
+            # CS2 版块只留大赛话题
+            if board == "csgo" and not any(k in tt for k in CS_MAJOR_KW):
                 continue
-            seen.add(t[:22])
-            esports.append({
-                "title": t,
-                "url": u,
-                "source": game,
-                "time": "",
-                "ts": 0,
-            })
+            if any(k in tt for k in LOL_NOISE):
+                continue
+            if tt[:22] in seen:
+                continue
+            seen.add(tt[:22])
+            item = {"title": tt, "url": u, "source": game, "time": "", "ts": 0}
+            # 虎扑的世界赛对阵 / 结果同样置顶
+            if board == "lol" and _lol_is_world_match(tt):
+                worlds.append(item)
+            else:
+                esports.append(item)
             n += 1
         print(f"  [游戏] 电竞·虎扑 {game}: {n} 条")
 
-    # 新游发售/测试/定档类优先，其次按时间
-    hot.sort(key=lambda x: (0 if any(k in x["title"] for k in GAME_HOT_KW) else 1,
-                            -(x.get("ts") or 0)))
-    # 小黑盒排在最前：它是用户指定的首要来源
-    hot = xhh + hot
+    # 近期热门：按「来源权重 + 时效 + 新游关键词」排序，各源自然交错
+    now_ts = time.time()
+    hot.sort(key=lambda x: -_game_score(x, now_ts))
+    hot = _interleave_sources(hot)
+
+    # 电竞：世界赛对阵/结果置顶（按时间倒序），其余 CS + LPL 混合按热度排
+    worlds.sort(key=lambda x: -(x.get("ts") or 0))
+    esports.sort(key=lambda x: -_esports_score(x, now_ts))
+    esports = _interleave_sources(esports)
+    esports = worlds + esports
+
+    # HLTV 是英文源，给标题配一句中文摘要（只作用于这一家，别的源不动）
+    cache = _cache_load()
+    n_tr = 0
+    for it in esports:
+        if it.get("source") != "HLTV":
+            it.pop("summary", None)
+            continue
+        raw = it.pop("summary", "")
+        if not raw or n_tr >= 15:
+            continue
+        for key, cn_desc in HLTV_TITLE_DESC.items():
+            if it["title"].startswith(key):
+                it["desc"] = cn_desc
+                break
+        else:
+            src = first_sentence(raw, 240) or it["title"]
+        if it.get("desc"):
+            n_tr += 1
+            continue
+        for a, b in HLTV_PRE:
+            src = src.replace(a, b)
+        # 腾讯在海外 IP 上不可达（云端抓不到），必须再兜一层 Google
+        cn = translate_qq(src, cache) or translate(src, cache)
+        if cn:
+            for a, b in HLTV_FIX:
+                cn = cn.replace(a, b)
+            it["desc"] = truncate_cn(cn, 46, hard=60, ratio=0.7)
+            n_tr += 1
+    if n_tr:
+        _cache_save(cache)
+    print(f"  [游戏] HLTV 中文摘要: {n_tr} 条")
+
     for it in hot + esports:
         it.pop("ts", None)
-    return {"近期热门": hot[:28], "电竞资讯": esports[:40]}
+    for it in esports:
+        it["tags"] = _esports_tags(it)
+    return {"近期热门": hot[:36], "电竞资讯": esports[:40]}
 
 
 # ============================================================

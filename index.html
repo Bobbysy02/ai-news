@@ -123,6 +123,8 @@
   .tag.media { background: var(--gray-tag); color: var(--muted); }
   .tag.community { background: #f3e8ff; color: #7c3aed; }
   .tag.time { background: none; color: var(--muted); padding-left: 0; }
+  /* 电竞标签行：项目 / 来源 / 赛事 */
+  .etags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
 
   .hot-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
   .hot-tabs button {
@@ -256,7 +258,7 @@
     </div>
   </section>
 
-  <footer>数据来源：OpenAI / Google / Microsoft / NVIDIA / Anthropic / Meta AI / IT之家 / 钛媒体 / 量子位 / InfoQ / Hacker News 等 · 热点来自公开接口 · 财经（华尔街见闻 / 财联社 / 东方财富 / 新浪财经）· 投行研报（东方财富研报中心，近 30 天）· 国际投行（Yahoo Finance / Google News）· 体育（新浪体育 / 天空体育 / 虎扑 / 腾讯体育比分）· 政治（中国新闻网 / 政府官网）· 游戏（机核 / 游研社 / 触乐）· 电竞（腾竞官方 / 完美世界 / 虎扑）</footer>
+  <footer>数据来源：OpenAI / Google / Microsoft / NVIDIA / Anthropic / Meta AI / IT之家 / 钛媒体 / 量子位 / InfoQ / Hacker News 等 · 热点来自公开接口 · 财经（华尔街见闻 / 财联社 / 东方财富 / 新浪财经）· 投行研报（东方财富研报中心，近 30 天）· 国际投行（Yahoo Finance / Google News）· 体育（新浪体育 / 天空体育 / 虎扑 / 腾讯体育比分）· 政治（中国新闻网 / 政府官网）· 游戏（小黑盒 / 游研社 / 游民星空 / 机核 / 触乐）· 电竞（腾竞官方 / 完美世界 / HLTV / 虎扑）</footer>
 </div>
 
 <script src="data.js"></script>
@@ -474,9 +476,19 @@
       return;
     }
     list.innerHTML = items.map(function (it, i) {
-      var meta = it.source ? '<div class="desc">' + escapeHtml(it.source) + "</div>" : "";
+      // 电竞条目带 tags（项目 / 来源 / 赛事），普通条目退回到来源名
+      var tags = "";
+      if (it.tags && it.tags.length) {
+        tags = '<div class="etags">' + it.tags.map(function (t, k) {
+          var cls = k === 0 ? "official" : (k === 1 ? "media" : "community");
+          return '<span class="tag ' + cls + '">' + escapeHtml(t) + "</span>";
+        }).join("") + "</div>";
+      }
+      var desc = it.desc ? '<div class="desc">' + escapeHtml(it.desc) + "</div>" : "";
+      var meta = (!tags && !desc && it.source)
+        ? '<div class="desc">' + escapeHtml(it.source) + "</div>" : "";
       return '<li><span class="rank">' + (i + 1) + "</span>" +
-        '<a href="' + it.url + '" target="_blank" rel="noopener">' + escapeHtml(it.title) + meta + "</a>" +
+        '<a href="' + it.url + '" target="_blank" rel="noopener">' + escapeHtml(it.title) + tags + desc + meta + "</a>" +
         (it.time ? '<span class="bili-meta">' + it.time + "</span>" : "") + "</li>";
     }).join("");
   }
