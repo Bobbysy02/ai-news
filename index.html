@@ -180,6 +180,7 @@
     <button data-sec="sec-finance">财经新闻</button>
     <button data-sec="sec-sports">体育新闻</button>
     <button data-sec="sec-politics">政治新闻</button>
+    <button data-sec="sec-games">游戏资讯</button>
   </nav>
 
   <!-- AI 新闻 -->
@@ -189,9 +190,8 @@
       <div class="filters" id="aiFilters">
         <button data-f="all" class="active">全部</button>
         <button data-f="official">官方一手</button>
-        <button data-f="zh">中文</button>
+        <button data-f="zh">中文社区</button>
         <button data-f="community">国外社区</button>
-        <button data-f="weekly">每周热点</button>
       </div>
       <div class="sort-box">
         <label for="sortSel">排序</label>
@@ -229,6 +229,8 @@
   <!-- 体育新闻 -->
   <section class="sec" id="sec-sports">
     <h2 class="section-title">体育新闻</h2>
+    <div class="sub-note" id="sportNote">只收录赛事结果与战报，不含任何博彩 / 竞彩内容</div>
+    <div class="hot-tabs" id="sportTabs"></div>
     <div class="card">
       <ul class="hot-list" id="sportsList"></ul>
     </div>
@@ -237,19 +239,29 @@
   <!-- 政治新闻 -->
   <section class="sec" id="sec-politics">
     <h2 class="section-title">政治新闻</h2>
-    <div class="sub-note">政策文件均抓取自政府官网公开信息（国务院 / 发改委 / 证监会 / 省市），点击可查看原文</div>
+    <div class="sub-note">政策文件均抓取自政府官网公开信息（国务院 / 发改委 / 证监会），点击可查看原文</div>
     <div class="hot-tabs" id="polTabs"></div>
     <div class="card">
       <ul class="hot-list" id="polList"></ul>
     </div>
   </section>
 
-  <footer>数据来源：OpenAI / Google / Microsoft / NVIDIA / Anthropic / Meta AI / IT之家 / 钛媒体 / 量子位 / InfoQ / Hacker News 等 · 热点来自公开接口 · 财经（华尔街见闻 / 财联社 / 东方财富 / 新浪财经）· 投行研报（东方财富研报中心，近 30 天）· 国际投行（Yahoo Finance / Google News）· 体育（新浪体育）· 政治（中国新闻网）</footer>
+  <!-- 游戏资讯 -->
+  <section class="sec" id="sec-games">
+    <h2 class="section-title">游戏资讯</h2>
+    <div class="sub-note" id="gameNote">近期热门新游与老游翻红 · 主流电竞赛事动态</div>
+    <div class="hot-tabs" id="gameTabs"></div>
+    <div class="card">
+      <ul class="hot-list" id="gameList"></ul>
+    </div>
+  </section>
+
+  <footer>数据来源：OpenAI / Google / Microsoft / NVIDIA / Anthropic / Meta AI / IT之家 / 钛媒体 / 量子位 / InfoQ / Hacker News 等 · 热点来自公开接口 · 财经（华尔街见闻 / 财联社 / 东方财富 / 新浪财经）· 投行研报（东方财富研报中心，近 30 天）· 国际投行（Yahoo Finance / Google News）· 体育（新浪体育 / 天空体育 / 虎扑 / 腾讯体育比分）· 政治（中国新闻网 / 政府官网）· 游戏（机核 / 游研社 / 触乐）· 电竞（腾竞官方 / 完美世界 / 虎扑）</footer>
 </div>
 
 <script src="data.js"></script>
 <script>
-  var DATA = window.DATA || { news: [], hot: {}, finance: {}, sports: [], politics: {}, updated: "" };
+  var DATA = window.DATA || { news: [], hot: {}, finance: {}, sports: {}, politics: {}, games: {}, updated: "" };
   document.getElementById("updateTime").textContent = DATA.updated
     ? "更新时间：" + DATA.updated : "尚未生成数据，请先运行抓取脚本";
 
@@ -326,24 +338,6 @@
   function renderNews() {
     var list = document.getElementById("newsList");
     var empty = document.getElementById("newsEmpty");
-
-    // 每周热点：渲染周榜数据（当天 Top20 / 持续热门）
-    if (currentFilter === "weekly") {
-      var weekly = DATA.weekly || [];
-      if (!weekly.length) { list.innerHTML = ""; empty.style.display = "block"; return; }
-      empty.style.display = "none";
-      list.innerHTML = weekly.map(function (n) {
-        var dayTag = n.days > 1
-          ? '<span class="tag community">持续 ' + n.days + " 天</span>"
-          : '<span class="tag community">今日</span>';
-        return '<li>' + thermo(n.heat) +
-          '<a href="' + n.url + '" target="_blank" rel="noopener">' +
-          '<div class="title">' + escapeHtml(n.title) + "</div>" +
-          '<div class="meta"><span class="tag media">' + escapeHtml(n.source) + "</span>" + dayTag + "</div>" +
-          "</a></li>";
-      }).join("");
-      return;
-    }
 
     var items = DATA.news.filter(function (n) {
       if (n.heat < 60) return false;
@@ -432,17 +426,67 @@
   });
   if (finPlatforms.length) { renderFinTabs(); renderFin(); }
 
-  // ---------- 体育新闻 ----------
+  // ---------- 体育新闻（按项目分栏） ----------
+  var sportTypes = Object.keys(DATA.sports || {});
+  var currentSport = sportTypes[0];
+  function renderSportTabs() {
+    document.getElementById("sportTabs").innerHTML = sportTypes.map(function (p) {
+      return '<button data-p="' + p + '"' + (p === currentSport ? ' class="active"' : "") + ">" + p + "</button>";
+    }).join("");
+  }
   function renderSports() {
     var list = document.getElementById("sportsList");
-    var items = DATA.sports || [];
+    var items = (DATA.sports || {})[currentSport] || [];
+    if (!items.length) {
+      list.innerHTML = '<li style="padding:16px 18px;color:#6b7280;font-size:13px">该栏目暂无内容</li>';
+      return;
+    }
     list.innerHTML = items.map(function (it, i) {
+      var meta = it.desc
+        ? '<div class="desc">' + escapeHtml(it.desc) + "</div>"
+        : (it.source ? '<div class="desc">' + escapeHtml(it.source) + "</div>" : "");
       return '<li><span class="rank">' + (i + 1) + "</span>" +
-        '<a href="' + it.url + '" target="_blank" rel="noopener">' + escapeHtml(it.title) + "</a>" +
+        '<a href="' + it.url + '" target="_blank" rel="noopener">' + escapeHtml(it.title) + meta + "</a>" +
         (it.time ? '<span class="bili-meta">' + it.time + "</span>" : "") + "</li>";
     }).join("");
   }
-  renderSports();
+  document.getElementById("sportTabs").addEventListener("click", function (e) {
+    if (e.target.tagName !== "BUTTON") return;
+    currentSport = e.target.getAttribute("data-p");
+    renderSportTabs();
+    renderSports();
+  });
+  if (sportTypes.length) { renderSportTabs(); renderSports(); }
+
+  // ---------- 游戏资讯 ----------
+  var gameTypes = Object.keys(DATA.games || {});
+  var currentGame = gameTypes[0];
+  function renderGameTabs() {
+    document.getElementById("gameTabs").innerHTML = gameTypes.map(function (p) {
+      return '<button data-p="' + p + '"' + (p === currentGame ? ' class="active"' : "") + ">" + p + "</button>";
+    }).join("");
+  }
+  function renderGames() {
+    var list = document.getElementById("gameList");
+    var items = (DATA.games || {})[currentGame] || [];
+    if (!items.length) {
+      list.innerHTML = '<li style="padding:16px 18px;color:#6b7280;font-size:13px">该栏目暂无内容</li>';
+      return;
+    }
+    list.innerHTML = items.map(function (it, i) {
+      var meta = it.source ? '<div class="desc">' + escapeHtml(it.source) + "</div>" : "";
+      return '<li><span class="rank">' + (i + 1) + "</span>" +
+        '<a href="' + it.url + '" target="_blank" rel="noopener">' + escapeHtml(it.title) + meta + "</a>" +
+        (it.time ? '<span class="bili-meta">' + it.time + "</span>" : "") + "</li>";
+    }).join("");
+  }
+  document.getElementById("gameTabs").addEventListener("click", function (e) {
+    if (e.target.tagName !== "BUTTON") return;
+    currentGame = e.target.getAttribute("data-p");
+    renderGameTabs();
+    renderGames();
+  });
+  if (gameTypes.length) { renderGameTabs(); renderGames(); }
 
   // ---------- 政治新闻 ----------
   var polTypes = Object.keys(DATA.politics || {});

@@ -10,6 +10,8 @@ permissions:
 
 env:
   TZ: Asia/Shanghai
+  # 开启需要真实浏览器的源（小黑盒）。本机不设这个变量，所以本地完全不用装 Playwright
+  ENABLE_PLAYWRIGHT: '1'
 
 jobs:
   update:
@@ -24,7 +26,12 @@ jobs:
           python-version: '3.12'
 
       - name: 安装依赖
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-ci.txt
+
+      - name: 确认浏览器
+        run: |
+          # ubuntu-latest 自带 Google Chrome，Playwright 直接驱动即可，无需下载 Chromium
+          which google-chrome || which google-chrome-stable || echo "未找到 Chrome，小黑盒源会自动跳过"
 
       - name: 抓取新闻
         run: python fetch_news.py

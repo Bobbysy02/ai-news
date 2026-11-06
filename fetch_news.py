@@ -39,7 +39,7 @@ AI_SOURCES = [
     {"name": "Microsoft",     "url": "https://www.microsoft.com/en-us/research/feed/", "tier": "official", "lang": "en", "weight": 71},
     {"name": "NVIDIA",        "url": "https://blogs.nvidia.com/feed/",                 "tier": "official", "lang": "en", "weight": 71},
     {"name": "HuggingFace",   "url": "https://huggingface.co/blog/feed.xml",           "tier": "official", "lang": "en", "weight": 71},
-    {"name": "IT之家",        "url": "https://www.ithome.com/rss/",                    "tier": "media",    "lang": "zh", "weight": 71},
+    {"name": "IT之家",        "url": "https://www.ithome.com/rss/",                    "tier": "media",    "lang": "zh", "weight": 62},
     # ---------- 顶级权威媒体（weight 62） ----------
     {"name": "MIT Tech Review", "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed", "tier": "media", "lang": "en", "weight": 62},
     {"name": "The Verge AI",  "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", "tier": "media", "lang": "en", "weight": 62},
@@ -50,7 +50,7 @@ AI_SOURCES = [
     {"name": "Wired AI",      "url": "https://www.wired.com/feed/tag/ai/latest/rss",   "tier": "media", "lang": "en", "weight": 58},
     {"name": "VentureBeat",   "url": "https://venturebeat.com/category/ai/feed/",      "tier": "media", "lang": "en", "weight": 58},
     {"name": "量子位",          "url": "https://www.qbitai.com/feed",                   "tier": "media", "lang": "zh", "weight": 58},
-    {"name": "InfoQ 中文",     "url": "https://www.infoq.cn/feed",                     "tier": "media", "lang": "zh", "weight": 58},
+    {"name": "InfoQ 中文",     "url": "https://www.infoq.cn/feed",                     "tier": "media", "lang": "zh", "weight": 64},
     {"name": "少数派",          "url": "https://sspai.com/feed",                       "tier": "media", "lang": "zh", "weight": 58},
     {"name": "爱范儿",          "url": "https://www.ifanr.com/feed",                   "tier": "media", "lang": "zh", "weight": 58},
     {"name": "极客公园",        "url": "https://www.geekpark.net/rss",                 "tier": "media", "lang": "zh", "weight": 58},
@@ -169,6 +169,107 @@ BANK_LIMIT = 45           # 国际投行板块最终条数
 # 体育新闻：新浪体育滚动接口（RSS 源早已停更在 2018 年，改用官方 JSON 接口）
 SINA_SPORTS_API = "https://feed.mix.sina.com.cn/api/roll/get?pageid=153&lid=2512&num=30&page=1"
 
+# ---------- 体育：按项目分子栏目 ----------
+# 标题关键词 → 子栏目。赛车关键词最独特放最前面，避免被通用词抢走
+SPORT_CATS = [
+    ("赛车", ["F1", "MotoGP", "方程式", "维斯塔潘", "汉密尔顿", "勒克莱尔", "诺里斯",
+              "法拉利", "红牛车队", "梅赛德斯", "迈凯伦", "赛车", "拉力赛", "纳斯卡",
+              "排位赛", "正赛", "车手积分", "Norris", "Verstappen", "Hamilton", "Leclerc",
+              "Ferrari", "McLaren", "Red Bull", "Mercedes", "Wolff", "Ocon", "Haas",
+              "Cadillac", "Grand Prix", "Prix", "Antonelli"]),
+    ("篮球", ["NBA", "CBA", "篮球", "詹姆斯", "库里", "杜兰特", "湖人", "勇士", "凯尔特人",
+              "雄鹿", "篮网", "文班", "约基奇", "东契奇", "塔图姆", "热火", "快船", "掘金",
+              "独行侠", "太阳", "76人", "尼克斯", "雷霆", "森林狼", "季后赛", "火箭",
+              "灰熊", "老鹰", "步行者", "黄蜂", "马刺", "开拓者", "爵士", "魔术", "活塞",
+              "奇才", "骑士", "猛龙", "公牛", "国王", "鹈鹕", "恩比德", "字母哥", "爱德华兹",
+              "亚历山大", "莫兰特", "特雷杨", "哈登", "欧文", "布克", "锡安", "班凯罗",
+              "布朗", "库明加", "申京", "奥萨尔", "篮板", "助攻", "三分", "Doncic",
+              "男篮", "女篮", "郭士强", "姚明", "易建联"]),
+    ("足球", ["足球", "中超", "英超", "西甲", "意甲", "德甲", "法甲", "欧冠", "世界杯",
+              "欧洲杯", "亚洲杯", "国足", "梅西", "C罗", "皇马", "巴萨", "曼联", "利物浦",
+              "阿森纳", "拜仁", "尤文", "切尔西", "曼城", "热刺", "AC米兰", "国际米兰",
+              "点球", "红牌", "联赛", "杯赛", "进球", "多特蒙德", "贝蒂斯", "波尔图",
+              "那不勒斯", "费内巴切", "莱比锡", "布莱顿", "阿森纳",
+              "Liverpool", "Arsenal", "Chelsea", "Tottenham", "Everton", "Reds",
+              "Real Madrid", "Barcelona", "Bayern", "Juventus", "PSG",
+              "Inter Milan", "Premier League", "Champions League", "World Cup",
+              "Kane", "Messi", "Ronaldo", "Salah", "Haaland", "Mbappe", "football",
+              # 天空体育的英文标题常只写球队/赛事名，不补这些会漏到「综合」
+              "Europa League", "Conference League", "Bundesliga", "La Liga",
+              "Serie A", "Ligue 1", "FA Cup", "Man Utd", "Man United",
+              "Manchester United", "Man City", "Manchester City", "Brighton",
+              "Celtic", "Rangers", "Newcastle", "Aston Villa", "West Ham",
+              "Leeds", "Fulham", "Brentford", "Crystal Palace", "Bournemouth",
+              "Wolves", "Leicester", "Southampton", "Sunderland", "Nottingham",
+              "Betis", "Getafe", "Sevilla", "Valencia", "Atletico", "Dortmund",
+              "Leipzig", "Leverkusen", "Napoli", "Lazio", "Benfica", "Porto",
+              "Ajax", "PSV", "Feyenoord", "Besiktas", "Galatasaray",
+              "Fenerbahce", "Deschamps", "Carrick"]),
+]
+
+# 综合类（乒乓/网球/橄榄球/板球/拳击等）的英文关键词，用于把天空体育的杂项归类
+SPORT_OTHER_EN = ["Boxing", "boxer", "fight", "Wilder", "Usyk", "Billam-Smith", "Zuffa",
+                  "Cricket", "wicket", "Ashes", "Rugby", "Tennis", "Wimbledon",
+                  "snooker", "Golf", "athletics", "swimming"]
+
+# 天空体育 RSS（英文战报，按运动分类，实测每个源 20 条）
+SKY_SPORTS_RSS = [
+    ("足球", "https://www.skysports.com/rss/12040"),
+    ("赛车", "https://www.skysports.com/rss/12433"),
+    ("综合", "https://www.skysports.com/rss/12183"),   # 拳击
+    ("综合", "https://www.skysports.com/rss/12341"),   # 板球/橄榄球
+]
+
+# 虎扑版块（中文战报与流言，只取 [流言板] 这类资讯帖）
+HUPU_SPORTS = [
+    ("篮球", "nba"),
+    ("篮球", "cba"),
+    ("足球", "soccer"),
+]
+
+# 天空体育 RSS 里的导航/推广条目，直接跳过
+SKY_JUNK = ["Get Sky Sports", "Pub Finder", "Sky Sports live dates", "TV Picks",
+            "Watch on Sky", "How to watch", "Sign up", "Download the app"]
+
+# ---------- 游戏资讯 ----------
+# 判定「这条是不是游戏内容」：书名号基本都能锁定游戏名，再加平台/厂商词
+GAME_KW = ["游戏", "Steam", "PS5", "PS4", "Xbox", "Switch", "任天堂", "索尼", "微软",
+           "发售", "上线", "测试", "新作", "续作", "DLC", "版本", "更新", "手游", "端游",
+           "主机", "评测", "试玩", "开发", "制作人", "工作室", "封测", "公测", "抢先体验",
+           "独立游戏", "赛季", "开服", "联动", "副本", "资料片", "重制", "复刻",
+           "育碧", "卡普空", "米哈游", "腾讯", "网易", "Steam", "Epic", "PlayStation"]
+
+# 「近期热门」优先展示这类标题（新游发售/测试/定档）
+GAME_HOT_KW = ["发售", "上线", "公测", "封测", "内测", "测试", "定档", "开服", "新作",
+               "续作", "抢先体验", "预购", "首发", "登陆", "版本", "资料片", "重制",
+               "复刻", "更新"]
+
+# 近期热门：游戏媒体的综合资讯 RSS
+GAME_HOT_RSS = [
+    ("机核", "https://www.gcores.com/rss"),
+    ("游研社", "https://www.yystv.cn/rss/feed"),
+    ("触乐", "https://www.chuapp.com/feed"),
+]
+
+# 电竞资讯：虎扑各游戏版块的 [流言板]
+GAME_ESPORTS_BOARDS = [
+    ("英雄联盟", "lol"),
+    ("CS2", "csgo"),
+    ("王者荣耀", "kog"),
+    ("PUBG", "pubg"),
+]
+
+# 电竞标题里的游戏名，用于打标签
+ESPORTS_GAMES = {    "英雄联盟": ["LPL", "LCK", "LCS", "S赛", "世界赛", "MSI", "S16", "S15", "S14",
+                 "BLG", "JDG", "TES", "WBG", "IG", "RNG", "EDG", "T1", "GEN", "DK",
+                 "HLE", "Faker", "Chovy", "Wei", "英雄联盟", "LOL"],
+    "CS2": ["CS2", "CSGO", "Major", "NAVI", "Vitality", "FaZe", "G2", "Liquid",
+            "zonic", "iM", "HLTV"],
+    "王者荣耀": ["KPL", "王者荣耀", "狼队", "AG超玩会", "TTG", "eStar", "挑杯"],
+    "PUBG": ["PUBG", "PCL", "绝地求生"],
+}
+
+
 # 政治新闻源（RSS）：国家级时政 + 政策会议决策
 POLITICS_FEEDS = [
     ("中国新闻网·时政", "https://www.chinanews.com.cn/rss/china.xml"),
@@ -204,7 +305,16 @@ POLITICS_NOISE = [
 POLITICS_TOPIC_CAP = {"国台办": 3, "陆委会": 1, "台独": 1}
 
 # 体育噪音词：剔除非新闻的博彩推荐/彩票预测
-SPORTS_NOISE = ["竞彩", "推荐", "任九", "彩票", "赔率", "小刀汇", "关小刀", "半全场", "比分预测"]
+SPORTS_NOISE = ["竞彩", "彩票", "赔率", "盘口", "让球", "亚盘", "大小球", "独赢", "串关",
+                "小刀汇", "关小刀", "任九", "半全场", "比分预测", "投注", "赌球", "博彩",
+                "六合彩", "双色球", "大乐透", "足彩", "竞猜", "开户", "充值", "盈利计划",
+                "过关", "单关", "北单", "盈球", "彩经", "彩吧", "买球", "下注", "红单",
+                # 媒体号的「荐彩」写法，标题里往往不带「彩票」二字
+                "胜负彩", "复式", "比赛解读", "红王", "心水", "定胆", "稳胆", "独胆",
+                "总汇", "荐彩", "解盘", "福彩", "奖号", "3D预测", "排列三",
+                # 板球不在收录范围，别混进足球（橄榄球要保留，归综合）
+                "T20", "cricket", "Cricket", "wicket", "板球", "IPL", "ODI",
+                "Test match"]
 
 # 小红书热搜（独立免费接口，uapis.cn）
 XHS_API = "https://uapis.cn/api/v1/misc/hotboard?type=xiaohongshu"
@@ -443,12 +553,12 @@ def _tidy_cn(s, floor=24):
     return re.sub(r"\s+([，。；：、！？])", r"\1", s).strip()
 
 
-def truncate_cn(text, limit=34, hard=40, ratio=0.55):
-    """极简总结：压到一两行内，只收在标点处，**不留省略号**
+def truncate_cn(text, limit=48, hard=56, ratio=0.55):
+    """极简总结：压到一行内说完，只收在标点处，**不留省略号**
 
     直接在原文上找断句位置截取（不重新拼接），顿号、书名号原样保留；
     第一个分句本身就超过 limit 时，语义完整优先，允许放到 hard 字。
-    AI 新闻用默认（一两行），国际投行传更大的 limit 以保留更多信息。
+    桌面宽度下一行约容 60 字，limit=48 留了余量；国际投行另传参数。
     """
     text = clean(text).replace("\n", " ").strip()
     if not text:
@@ -492,9 +602,9 @@ def build_briefs(item, cache):
     sm = translate(src, cache)
     if sm:
         sm = truncate_cn(sm)
-        # 摘要翻译不可用（只翻了半句、返回「待定」）或压不进两行时，
+        # 摘要翻译不可用（只翻了半句、返回「待定」）或长到一行放不下时，
         # 退回更短的中文标题，保证每行都是完整句子
-        if tr and 8 <= len(tr) <= 34 and (len(sm) < 18 or len(sm) > 34):
+        if tr and 8 <= len(tr) <= 46 and (len(sm) < 20 or len(sm) > 54):
             sm = tr
     return tr, sm
 
@@ -888,40 +998,521 @@ def fetch_finance():
     return result
 
 
+def _sport_cat(title):
+    """按标题关键词判定运动项目，认不出就归到「综合」"""
+    low = title.lower()
+    for cat, kws in SPORT_CATS:
+        if any(k.lower() in low for k in kws):
+            return cat
+    return "综合"
+
+
+def _fetch_hupu_board(board, per=8):
+    """抓虎扑某版块的资讯帖，优先 [流言板]（官方转载，质量最好）"""
+    out = []
+    try:
+        r = requests.get(f"https://bbs.hupu.com/{board}", headers=UA, timeout=18)
+        if r.status_code != 200:
+            return out
+        r.encoding = "utf-8"
+        links = re.findall(r'<a[^>]+href="(/[0-9]+\.html)"[^>]*>(.*?)</a>', r.text, re.S)
+        items = []
+        for u, t in links:
+            t = re.sub(r"<[^>]+>", "", t)
+            t = re.sub(r"\s+", "", t).replace("&amp;", "&").replace("&quot;", '"')
+            # 跳过广告位/活动页（标题本身就是链接地址）
+            if "http" in t or "hupu.com" in t or "activity-static" in u:
+                continue
+            if 12 < len(t) < 120:
+                items.append((t, "https://bbs.hupu.com" + u))
+        lb = [x for x in items if "流言板" in x[0]]
+        # 只取官方转载的 [流言板]，普通用户帖质量太杂（预测比分、阵容讨论等）
+        pool = lb
+        seen = set()
+        for t, u in pool:
+            t2 = t.replace("[流言板]", "").strip()
+            if t2 in seen:
+                continue
+            seen.add(t2)
+            out.append((t2, u))
+            if len(out) >= per:
+                break
+    except Exception:
+        pass
+    return out
+
+
+# ---------- 腾讯体育比分（JS 渲染页，但数据内嵌在 __INITIAL_STATE__ 里）----------
+QQ_SPORTS_HOME = "https://sports.qq.com/"
+QQ_SCORE_PAGE = "https://sports.qq.com/kbsweb/game.htm?mid={mid}"
+# 电竞赛事归「游戏资讯」，体育这边不重复收录
+SCORE_NOISE = ["S赛", "LPL", "KPL", "LCK", "LDL", "英雄联盟", "王者荣耀",
+               "CS2", "DOTA", "无畏契约", "VALORANT"]
+
+
+def fetch_qq_scores():
+    """腾讯体育：解析首页内嵌的 window.__INITIAL_STATE__，取已结束赛事的比分
+
+    这个页面是 Vue 渲染的，标签里没有一条新闻文本，但整份数据被序列化进了
+    script 里。所以不需要无头浏览器，切出那段 JSON 再 json.loads 即可。
+    matchPeriod == "2" 表示比赛已结束，此时 leftGoal / rightGoal 是最终比分。
+    """
+    out, seen = [], set()
+    try:
+        r = requests.get(QQ_SPORTS_HOME, headers=UA, timeout=25)
+        r.encoding = "utf-8"
+        html = r.text
+        i = html.find("window.__INITIAL_STATE__=")
+        if i < 0:
+            print("  [体育] 腾讯比分: 页面里没有内嵌状态")
+            return out
+        j = html.find("{", i)
+        depth, end = 0, None
+        for k in range(j, len(html)):
+            ch = html[k]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = k + 1
+                    break
+        state = json.loads(html[j:end])
+    except Exception as e:
+        print(f"  [体育] 腾讯比分: 失败 {str(e)[:50]}")
+        return out
+
+    rows = []
+
+    def walk(o, dep=0):
+        if dep > 12:
+            return
+        if isinstance(o, dict):
+            if o.get("leftName") and o.get("rightName") and str(o.get("matchPeriod")) == "2":
+                rows.append(o)
+            for v in o.values():
+                walk(v, dep + 1)
+        elif isinstance(o, list):
+            for v in o[:120]:
+                walk(v, dep + 1)
+
+    walk(state)
+
+    for m in rows:
+        desc = clean(str(m.get("matchDesc") or ""))
+        left = clean(str(m.get("leftName") or ""))
+        right = clean(str(m.get("rightName") or ""))
+        lg, rg = m.get("leftGoal"), m.get("rightGoal")
+        if not left or not right or lg is None or rg is None:
+            continue
+        if any(k in desc for k in SCORE_NOISE):
+            continue
+        mid = str(m.get("mid") or "")
+        if not mid:
+            continue
+        title = f"{desc} · {left} {lg}-{rg} {right}" if desc else f"{left} {lg}-{rg} {right}"
+        if title[:20] in seen:
+            continue
+        seen.add(title[:20])
+        ts = 0
+        st = str(m.get("startTime") or "")
+        try:
+            ts = int(time.mktime(time.strptime(st, "%Y-%m-%d %H:%M:%S")))
+        except Exception:
+            pass
+        out.append({
+            "title": title[:60],
+            "url": QQ_SCORE_PAGE.format(mid=mid),
+            "source": "腾讯体育",
+            "time": st[5:16] if st else "",
+            "ts": ts,
+        })
+
+    out.sort(key=lambda x: -(x.get("ts") or 0))
+
+    # 按项目轮转取样：一天十几场 NBA 会把凌晨的欧冠、网球全压到列表底部
+    by_cat = {}
+    for it in out:
+        by_cat.setdefault(_sport_cat(it["title"]), []).append(it)
+    picked, idx = [], 0
+    while len(picked) < 40:
+        added = False
+        for arr in by_cat.values():
+            if idx < len(arr):
+                picked.append(arr[idx])
+                added = True
+                if len(picked) >= 40:
+                    break
+        if not added:
+            break
+        idx += 1
+
+    for it in picked:
+        it.pop("ts", None)
+    return picked
+
+
 def fetch_sports():
-    """抓取体育新闻（新浪体育滚动接口 lid=2512，实时更新）"""
-    items = []
-    seen_title = set()
-    skipped = 0
+    """体育新闻：新浪体育 + 天空体育 + 虎扑，按项目分栏目，彻底剔除博彩"""
+    buckets = {"足球": [], "篮球": [], "赛车": [], "综合": []}
+    seen, skipped = set(), 0
+
+    def add(title, url, source, ts=0, cat=None, summary=""):
+        nonlocal skipped
+        title = clean(title)
+        if not title or not url:
+            return
+        if any(k in title for k in SPORTS_NOISE):
+            skipped += 1
+            return
+        if title[:22] in seen:
+            return
+        seen.add(title[:22])
+        # 标题关键词优先（天空体育的「足球」源里会混 F1、篮球），
+        # 认不出来时才退回数据源自带的分类
+        guess = _sport_cat(title)
+        c = guess if guess != "综合" or cat not in buckets else cat
+        buckets[c].append({
+            "title": title,
+            "url": url,
+            "source": source,
+            "time": time.strftime("%m-%d %H:%M", time.localtime(ts)) if ts else "",
+            "ts": ts,
+            "summary": summary,
+        })
+
+    # 1) 新浪体育滚动（中文）
     try:
         r = requests.get(SINA_SPORTS_API, headers=UA, timeout=20)
         data = r.json().get("result", {}).get("data", [])
-        for d in data[:30]:
-            title = clean(d.get("title", ""))
-            url = d.get("url", "")
-            if not title or not url:
+        for d in data[:40]:
+            add(d.get("title", ""), d.get("url", ""), "新浪体育",
+                int(d.get("ctime", 0) or 0))
+        print(f"  [体育] 新浪体育: 抓 {len(data[:40])} 条")
+    except Exception as e:
+        print(f"  [体育] 新浪体育: 失败 {str(e)[:50]}")
+
+    # 2) 天空体育 RSS（英文战报，按运动分类）
+    for cat, url in SKY_SPORTS_RSS:
+        try:
+            r = requests.get(url, headers=UA, timeout=18)
+            n = 0
+            for e in feedparser.parse(r.content).entries:
+                t = clean(e.get("title", ""))
+                if any(j.lower() in t.lower() for j in SKY_JUNK):
+                    continue
+                add(t, e.get("link", ""), "天空体育",
+                    to_ts(e.get("published_parsed")), None,
+                    clean(e.get("summary", ""))[:400])
+                n += 1
+            print(f"  [体育] 天空体育·{cat}: {n} 条")
+        except Exception as e:
+            print(f"  [体育] 天空体育·{cat}: 失败 {str(e)[:40]}")
+
+    # 3) 虎扑（中文战报与流言）
+    for cat, board in HUPU_SPORTS:
+        got = _fetch_hupu_board(board, per=6)
+        for t, u in got:
+            add(t, u, "虎扑", 0, cat)
+        print(f"  [体育] 虎扑·{board}: {len(got)} 条")
+
+    # 各子栏目按来源轮转取样：虎扑的帖子没有时间戳，纯按时间排会被全部挤掉
+    def pick_mixed(lst, cap=18):
+        by_src = {}
+        for it in lst:
+            by_src.setdefault(it["source"], []).append(it)
+        for arr in by_src.values():
+            arr.sort(key=lambda x: -(x.get("ts") or 0))
+        out, i = [], 0
+        while len(out) < cap:
+            added = False
+            for arr in by_src.values():
+                if i < len(arr):
+                    out.append(arr[i])
+                    added = True
+                    if len(out) >= cap:
+                        break
+            if not added:
+                break
+            i += 1
+        return out
+
+    # 4) 腾讯体育：已结束赛事的比分（结构化，最硬的结果数据）
+    scores = fetch_qq_scores()
+    print(f"  [体育] 腾讯比分: {len(scores)} 场已结束")
+
+    result = {}
+    allitems = []
+    for cat in ("足球", "篮球", "赛车", "综合"):
+        lst = buckets.get(cat, [])
+        lst.sort(key=lambda x: -(x.get("ts") or 0))
+        result[cat] = pick_mixed(lst, 18)
+        allitems.extend(lst)
+
+    # 「全部」按来源配额混合，避免某一个源把列表占满
+    quota = {"新浪体育": 18, "天空体育": 15, "虎扑": 12}
+    mix = []
+    for src in ("新浪体育", "天空体育", "虎扑"):
+        mix.extend([x for x in allitems if x["source"] == src][:quota.get(src, 10)])
+    mix.sort(key=lambda x: -(x.get("ts") or 0))
+    # 赛果放最前：体育板块最该先看到的是「今天打完的结果」
+    result = {"今日赛果": scores, "全部": mix[:45], **result}
+
+    # 天空体育是英文源，给标题配一句中文摘要（只作用于这一家，别的源不动）
+    cache = _cache_load()
+    done, n_tr = set(), 0
+    for lst in result.values():
+        for it in lst:
+            if it.get("source") != "天空体育" or it["url"] in done:
                 continue
-            # 剔除博彩推荐/彩票预测类内容
-            if any(k in title for k in SPORTS_NOISE):
-                skipped += 1
+            done.add(it["url"])
+            raw = it.pop("summary", "")
+            if not raw or n_tr >= 40:
                 continue
-            if title in seen_title:
+            cn = translate_qq(first_sentence(raw, 260) or it["title"], cache)
+            if cn:
+                it["desc"] = truncate_cn(cn, 46, hard=60, ratio=0.7)
+                n_tr += 1
+    if n_tr:
+        _cache_save(cache)
+    print(f"  [体育] 天空体育中文摘要: {n_tr} 条")
+    for it in allitems:
+        it.pop("summary", None)
+
+    for it in allitems:
+        it.pop("ts", None)
+    total = sum(len(v) for k, v in result.items() if k not in ("全部", "今日赛果"))
+    note = f"（剔除博彩 {skipped} 条）" if skipped else ""
+    print(f"  [体育] 资讯共 {total} 条{note}，赛果 {len(scores)} 场")
+    return result
+
+
+# 完美世界 CS2 官网：列表在 HTML 锚点里，日期藏在 /article/details/YYYYMMDD/ 路径中
+WANMEI_CS_URL = "https://csgo.wanmei.com/"
+# 腾讯 CMS 赛事内容接口：target=25 是英雄联盟赛事官方报道（S 赛、MSI 等）
+CMC_NEWS_API = ("https://apps.game.qq.com/cmc/zmMcnTargetContentList"
+                "?r0=json&page=1&num={num}&target={target}&source=web_pc&_=1")
+CMC_LOL_TARGET = 25
+LPL_NEWS_PAGE = "https://lpl.qq.com/es/news_detail.shtml?nid={docid}"
+
+
+def _fetch_wanmei_cs(per=10):
+    """完美世界 CS2 官网新闻（服务端渲染，锚点里带日期）"""
+    out, seen = [], set()
+    try:
+        r = requests.get(WANMEI_CS_URL, headers=UA, timeout=20)
+        r.encoding = r.apparent_encoding or "utf-8"
+        pat = r'<a[^>]+href="([^"]*?/article/details/(\d{8})/(\d+)\.html)"[^>]*>(.*?)</a>'
+        for href, date, aid, raw in re.findall(pat, r.text, re.S):
+            title = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", raw)).strip()
+            if len(title) < 8 or aid in seen:
                 continue
-            seen_title.add(title)
-            ts = int(d.get("ctime", 0) or 0)
-            items.append({
-                "title": title,
+            seen.add(aid)
+            if href.startswith("//"):
+                url = "https:" + href
+            elif href.startswith("http"):
+                url = href
+            else:
+                url = "https://www.csgo.com.cn" + href
+            try:
+                ts = int(time.mktime(time.strptime(date, "%Y%m%d")))
+            except Exception:
+                ts = 0
+            out.append({
+                "title": title[:72],
                 "url": url,
-                "source": "新浪体育",
-                "time": time.strftime("%m-%d %H:%M", time.localtime(ts)) if ts else "",
+                "source": "完美世界",
+                "time": f"{date[4:6]}-{date[6:]}",
                 "ts": ts,
             })
-        note = f"（剔除博彩推荐 {skipped} 条）" if skipped else ""
-        print(f"  [体育] 新浪体育: {len(items)} 条{note}")
+            if len(out) >= per * 3:
+                break
     except Exception as e:
-        print(f"  [体育] 新浪体育: 抓取失败 {str(e)[:50]}")
-    items.sort(key=lambda x: -x["ts"])
-    return items
+        print(f"  [游戏] 完美世界: 失败 {str(e)[:40]}")
+    # 官网顶部是置顶的老文章（3 月、9 月各一篇），按日期重排并丢掉过期的
+    cutoff = time.time() - 120 * 86400
+    out = [x for x in out if not x["ts"] or x["ts"] >= cutoff]
+    out.sort(key=lambda x: -(x["ts"] or 0))
+    return out[:per]
+
+
+def _fetch_lpl_news(per=10):
+    """腾竞官方英雄联盟赛事报道（腾讯 CMS 接口，返回标题+发布时间+文档号）"""
+    out = []
+    try:
+        r = requests.get(CMC_NEWS_API.format(num=per * 2, target=CMC_LOL_TARGET),
+                         headers=UA, timeout=18)
+        for it in (r.json().get("data") or {}).get("result") or []:
+            title = clean(it.get("sTitle") or "")
+            docid = it.get("iDocID")
+            if not title or not docid:
+                continue
+            # 海报 / 宣传片 / 壁纸属于物料，不是报道
+            if any(k in title for k in ("海报", "宣传片", "壁纸", "表情包")):
+                continue
+            created = str(it.get("sCreated") or "")
+            out.append({
+                "title": title[:72],
+                "url": LPL_NEWS_PAGE.format(docid=docid),
+                "source": "腾竞官方",
+                "time": created[5:16] if len(created) >= 16 else "",
+                "ts": 0,
+            })
+            if len(out) >= per:
+                break
+    except Exception as e:
+        print(f"  [游戏] 腾竞官方: 失败 {str(e)[:40]}")
+    return out
+
+
+# ---------- 小黑盒（纯 SPA，接口要 _rnd 动态签名，只有跑 JS 才能渲染）----------
+XHH_HOME = "https://www.xiaoheihe.cn/app/home"
+
+# 本地默认不启用：本机不装 180MB 浏览器；GitHub Actions 会自动注入
+# GITHUB_ACTIONS=true，所以在云端无需配置即可生效。
+PLAYWRIGHT_ENABLED = (
+    os.environ.get("ENABLE_PLAYWRIGHT", "").strip() == "1"
+    or os.environ.get("GITHUB_ACTIONS", "").strip().lower() == "true"
+)
+
+
+def _launch_browser(p):
+    """优先驱动系统已装的浏览器，避免再下一次 Chromium"""
+    for ch in ("chrome", "msedge"):
+        try:
+            return p.chromium.launch(channel=ch, headless=True)
+        except Exception:
+            continue
+    return p.chromium.launch(headless=True)
+
+
+def fetch_xiaoheihe(limit=10):
+    """小黑盒社区首页。只在云端跑。
+
+    首页是 @heybox-spa 的空壳（3.8KB），接口还要 _rnd 签名，
+    静态请求一条都拿不到；只有真正执行 JS 才渲染得出来。
+    """
+    if not PLAYWRIGHT_ENABLED:
+        print("  [游戏] 小黑盒: 本地跳过（仅云端启用）")
+        return []
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        print("  [游戏] 小黑盒: playwright 未安装，跳过")
+        return []
+
+    out = []
+    try:
+        with sync_playwright() as p:
+            browser = _launch_browser(p)
+            page = browser.new_page(locale="zh-CN",
+                                    viewport={"width": 1440, "height": 900})
+            # 不用 networkidle：小黑盒有长连接，永远等不到 idle
+            page.goto(XHH_HOME, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_selector("a[href*='/app/bbs/link/']", timeout=20000)
+            for a in page.query_selector_all("a[href*='/app/bbs/link/']"):
+                el = a.query_selector(".bbs-content__title")
+                title = clean(el.inner_text()) if el else ""
+                href = a.get_attribute("href") or ""
+                if not title or not href:
+                    continue
+                out.append({
+                    "title": title[:80],
+                    "url": href if href.startswith("http") else "https://www.xiaoheihe.cn" + href,
+                    "source": "小黑盒",
+                    "time": "",
+                    "ts": 0,
+                })
+                if len(out) >= limit:
+                    break
+            browser.close()
+        print(f"  [游戏] 小黑盒: {len(out)} 条")
+    except Exception as e:
+        print(f"  [游戏] 小黑盒: 渲染失败 {str(e)[:60]}")
+    return out
+
+
+def fetch_games():
+    """游戏资讯：近期热门（小黑盒 + 游戏媒体 RSS）+ 电竞资讯（腾竞 / 完美世界 / 虎扑）"""
+    hot, esports, seen = [], [], set()
+
+    # 1) 小黑盒：社区首页（云端才跑），作为「近期热门」的头条来源
+    xhh = []
+    for it in fetch_xiaoheihe(limit=10):
+        t = it["title"]
+        # 社区帖什么都有，只留和游戏相关的
+        if "《" not in t and not any(k.lower() in t.lower() for k in GAME_KW):
+            continue
+        if t[:22] in seen:
+            continue
+        seen.add(t[:22])
+        xhh.append(it)
+    print(f"  [游戏] 小黑盒过滤后: {len(xhh)} 条")
+
+    # 2) 近期热门：机核 / 游研社 / 触乐
+    for name, url in GAME_HOT_RSS:
+        try:
+            r = requests.get(url, headers=UA, timeout=20)
+            n = 0
+            for e in feedparser.parse(r.content).entries:
+                title = clean(e.get("title", ""))
+                link = e.get("link", "")
+                if not title or not link or title[:22] in seen:
+                    continue
+                # 机核/触乐也发播客、访谈等非游戏内容，这里只留游戏相关
+                if "《" not in title and not any(k.lower() in title.lower() for k in GAME_KW):
+                    continue
+                seen.add(title[:22])
+                ts = to_ts(e.get("published_parsed"))
+                hot.append({
+                    "title": title,
+                    "url": link,
+                    "source": name,
+                    "time": time.strftime("%m-%d", time.localtime(ts)) if ts else "",
+                    "ts": ts,
+                })
+                n += 1
+            print(f"  [游戏] {name}: {n} 条")
+        except Exception as e:
+            print(f"  [游戏] {name}: 失败 {str(e)[:40]}")
+
+    # 2) 电竞资讯：官方渠道优先（腾竞 LoL / 完美世界 CS2），再补虎扑各版块
+    for fn, label in ((_fetch_lpl_news, "腾竞官方·英雄联盟"), (_fetch_wanmei_cs, "完美世界·CS2")):
+        got = fn(per=10)
+        n = 0
+        for it in got:
+            if it["title"][:22] in seen:
+                continue
+            seen.add(it["title"][:22])
+            esports.append(it)
+            n += 1
+        print(f"  [游戏] 电竞·{label}: {n} 条")
+
+    for game, board in GAME_ESPORTS_BOARDS:
+        got = _fetch_hupu_board(board, per=8)
+        n = 0
+        for t, u in got:
+            if t[:22] in seen:
+                continue
+            seen.add(t[:22])
+            esports.append({
+                "title": t,
+                "url": u,
+                "source": game,
+                "time": "",
+                "ts": 0,
+            })
+            n += 1
+        print(f"  [游戏] 电竞·虎扑 {game}: {n} 条")
+
+    # 新游发售/测试/定档类优先，其次按时间
+    hot.sort(key=lambda x: (0 if any(k in x["title"] for k in GAME_HOT_KW) else 1,
+                            -(x.get("ts") or 0)))
+    # 小黑盒排在最前：它是用户指定的首要来源
+    hot = xhh + hot
+    for it in hot + esports:
+        it.pop("ts", None)
+    return {"近期热门": hot[:28], "电竞资讯": esports[:40]}
 
 
 # ============================================================
@@ -1234,8 +1825,6 @@ def fetch_gov_policy():
     result["国务院"] = fetch_gov_cn_policy()
     result["国家发改委"] = fetch_ndrc()
     result["证监会"] = fetch_csrc()
-    prov = fetch_provinces()
-    result["省市"] = prov
     return result
 
 
@@ -1456,6 +2045,10 @@ def main():
     sports = fetch_sports()
 
     print()
+    print("开始抓取游戏资讯...")
+    games = fetch_games()
+
+    print()
     print("开始抓取官方政策（政府官网公开信息）...")
     gov_policy = fetch_gov_policy()
 
@@ -1544,6 +2137,7 @@ def main():
         "finance": finance,
         "sports": sports,
         "politics": politics,
+        "games": games,
         "weekly": weekly,
     }
 
@@ -1552,8 +2146,10 @@ def main():
 
     print()
     print(f"完成！AI 新闻 {len(news)} 条（按热度排序），周榜 {len(weekly)} 条，"
-          f"财经 {sum(len(v) for v in finance.values())} 条，体育 {len(sports)} 条，"
+          f"财经 {sum(len(v) for v in finance.values())} 条，"
+          f"体育 {sum(len(v) for v in sports.values())} 条（{len(sports)} 类），"
           f"政治 {sum(len(v) for v in politics.values())} 条（{len(politics)} 类），"
+          f"游戏 {sum(len(v) for v in games.values())} 条（{len(games)} 类），"
           f"写入 data.js（更新于 {now}）")
 
 
