@@ -2,7 +2,10 @@ name: Daily AI News Update
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    # 故意避开整点：官方文档说明整点是 Actions 高负载时段，
+    # 排队会延迟（实测 08:00 的整点任务 08:56 才开跑），负载过高时甚至直接丢弃。
+    # 往后挪 17 分钟，延迟和被丢的概率都明显下降。北京时间 08:17 触发。
+    - cron: '17 0 * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -34,7 +37,15 @@ jobs:
           which google-chrome || which google-chrome-stable || echo "未找到 Chrome，小黑盒源会自动跳过"
 
       - name: 抓取新闻
-        run: python fetch_news.py
+        # 跨境抓取偶发抖动（连接重置、个别站点临时不可达）时自动重试一次。
+        # 第二次仍失败才让 job 变红；脚本中途失败不会写 data.js，
+        # 线上会继续显示前一天的完整数据，不会白屏。
+        run: |
+          python fetch_news.py || {
+            echo "::warning::首次抓取失败，5 秒后重试一次"
+            sleep 5
+            python fetch_news.py
+          }
 
       - name: 提交并推送更新
         run: |
