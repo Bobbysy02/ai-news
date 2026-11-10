@@ -638,20 +638,24 @@ AI_WORKERS = 3         # 并发批次数
 _AI_USAGE = []         # 记录 token 用量，便于核对花费
 
 AI_SYS_PROMPT = (
-    "你是科技新闻编辑。对每条英文新闻，输出两段中文：\n"
-    "1. translate：标题的中文翻译，保留产品名、模型名、公司名、人物的英文原文，不要加书名号或引号\n"
-    "2. summary：一句话内容总结，说清「发布了什么 / 发生了什么 / 有什么影响」\n"
+    "你是中文科技新闻编辑。为每条英文新闻写一句中文导语，"
+    "唯一目标是让中文读者一眼看懂这条新闻在讲什么。\n"
+    "先判断标题能不能看懂，再决定写法：\n"
+    "- 标题本身已经说清「谁做了什么」：就把它忠实译成通顺中文\n"
+    "- 标题是提问、口号、玩梗、术语堆砌、或信息不完整：不要硬译标题，"
+    "直接用正文写成一句说明，讲清发生了什么\n"
+    "- 标题和正文说的不一致：以正文为准\n"
     "硬性要求：\n"
-    "- 两段都在 45 个汉字以内，越精简越好\n"
-    "- 绝不翻译专有名词：Gemini Omni 1.2 Flash、GPT-6、Anthropic、NVIDIA、Jensen Huang 等一律保留英文原样\n"
-    "- 禁止出现「文本」「该文章」「本文」这类空话，也不要复述标题\n"
-    "- 不加评价、不标题党、不用感叹号\n"
-    '- 只输出 JSON，格式：{"items":[{"id":1,"translate":"...","summary":"..."}]}'
+    "- 一句话说完，40 个汉字以内，越精简越好；不换行、不分条、不写「译」「摘要」等前缀\n"
+    "- 专有名词一律保留英文原样，不要译成中文：Gemini Omni 1.2 Flash、GPT-6、Anthropic、NVIDIA、Jensen Huang 等\n"
+    "- 禁止「文本」「该文章」「本文」「据悉」这类空话，也不要复述读者已经看到的标题\n"
+    "- 不加评价、不标题党、不用感叹号、结尾不加句号\n"
+    '- 只输出 JSON，格式：{"items":[{"id":1,"line":"..."}]}'
 )
 
 
 def _ai_one(batch):
-    """一次模型调用，返回 {url: {"tr": 标题翻译, "sm": 内容总结}}"""
+    """一次模型调用，返回 {url: 中文导语}"""
     lines = []
     for i, it in enumerate(batch, 1):
         body = first_sentence(re.sub(r"\s+", " ", it.get("summary") or ""), 400)
@@ -682,31 +686,25 @@ def _ai_one(batch):
             k = int(row["id"]) - 1
             if not (0 <= k < len(batch)):
                 continue
-            tr = clean(str(row.get("translate", ""))).strip()
-            sm = clean(str(row.get("summary", ""))).strip()
-            rec = {}
-            if len(tr) >= 5:
-                rec["tr"] = truncate_cn(tr, 52, hard=60, ratio=0.7)
-            if len(sm) >= 8:
-                rec["sm"] = truncate_cn(sm, 58, hard=66, ratio=0.7)
-            if rec:
-                out[batch[k]["url"]] = rec
+            line = clean(str(row.get("line") or row.get("translate") or row.get("summary") or "")).strip()
+            if len(line) >= 5:
+                out[batch[k]["url"]] = truncate_cn(line, 52, hard=60, ratio=0.7)
         except Exception:
             continue
     return out
 
 
 def ai_briefs(items, cache):
-    """并发批量生成「标题翻译 + 内容总结」。失败只影响该批，返回已成功的部分。"""
+    """并发批量生成单行中文导语。失败只影响该批，返回已成功的部分。"""
     if not AI_API_KEY or not items:
         return {}
 
     hit, todo = {}, []
     for it in items:
-        # ai2 前缀：旧版只存了一句摘要，格式不同，直接不复用
-        ck = "ai2|" + (it.get("title") or "")[:80]
+        # ai3 前缀：ai2 存的是 {tr, sm} 两段，格式不同，不复用
+        ck = "ai3|" + (it.get("title") or "")[:80]
         val = cache.get(ck)
-        if isinstance(val, dict) and (val.get("tr") or val.get("sm")):
+        if isinstance(val, str) and len(val) >= 5:
             hit[it["url"]] = val
         else:
             todo.append(it)
@@ -728,10 +726,10 @@ def ai_briefs(items, cache):
                 print(f"    [AI] 一批失败，该批保留原翻译：{str(e)[:70]}")
                 continue
             for it in batch:
-                rec = got.get(it["url"])
-                if rec:
-                    hit[it["url"]] = rec
-                    cache["ai2|" + (it.get("title") or "")[:80]] = rec
+                line = got.get(it["url"])
+                if line:
+                    hit[it["url"]] = line
+                    cache["ai3|" + (it.get("title") or "")[:80]] = line
             done += len(batch)
             print(f"    [AI] 进度 {done}/{len(todo)}", flush=True)
 
@@ -2636,20 +2634,20 @@ def main():
     _cache_save(cache)
     print(f"  [OK] 翻译 {ok_tr} 条 / 总结 {ok_sum} 条")
 
-    # 配了 AI key 时，用模型重写「标题翻译 + 内容摘要」（同时覆盖 brief_tr 和 brief_sum）
+    # 配了 AI key 时，用模型重写为「单行中文导语」：
+    # AI 自己判断该译标题还是该说内容，只覆盖 brief_sum，并删掉旧的机器翻译 brief_tr，
+    # 避免前端出现「译 + 摘要」两行重复的内容
     ai_map = ai_briefs(todo, cache)
     if ai_map:
-        n_tr = n_sm = 0
+        n_ai = 0
         for it in todo:
-            rec = ai_map.get(it["url"]) or {}
-            if rec.get("tr"):
-                it["brief_tr"] = rec["tr"]
-                n_tr += 1
-            if rec.get("sm"):
-                it["brief_sum"] = rec["sm"]
-                n_sm += 1
+            line = ai_map.get(it["url"])
+            if line:
+                it["brief_sum"] = line
+                it.pop("brief_tr", None)
+                n_ai += 1
         _cache_save(cache)
-        print(f"  [AI] 标题翻译 {n_tr} 条 / 内容摘要 {n_sm} 条")
+        print(f"  [AI] 单行导语已覆盖 {n_ai}/{len(todo)} 条")
     else:
         print("  [AI] 未启用（没有配置 AI_API_KEY），沿用翻译摘要")
     # summary 字段只用于生成附注，不进最终数据，减小体积
