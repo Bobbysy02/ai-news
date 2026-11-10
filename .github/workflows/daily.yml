@@ -37,6 +37,11 @@ jobs:
           which google-chrome || which google-chrome-stable || echo "未找到 Chrome，小黑盒源会自动跳过"
 
       - name: 抓取新闻
+        # AI_API_KEY 没配置时值为空字符串，脚本会自动跳过 AI、退回翻译摘要，不会报错。
+        # 换供应商只需改 AI_MODEL / AI_BASE_URL（接口兼容 OpenAI 格式）。
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: deepseek-flash
         # 跨境抓取偶发抖动（连接重置、个别站点临时不可达）时自动重试一次。
         # 第二次仍失败才让 job 变红；脚本中途失败不会写 data.js，
         # 线上会继续显示前一天的完整数据，不会白屏。

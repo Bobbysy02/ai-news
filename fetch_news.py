@@ -10,6 +10,7 @@ import json
 import time
 import re
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 import os
 from urllib.parse import quote as urlquote
@@ -620,6 +621,112 @@ def build_briefs(item, cache):
         if tr and 8 <= len(tr) <= 46 and (len(sm) < 20 or len(sm) > 54):
             sm = tr
     return tr, sm
+
+
+# ============================================================
+# AI 摘要升级（可选功能）
+#   只有配了 AI_API_KEY 才会启用；接口兼容 OpenAI 格式，
+#   DeepSeek / 智谱 / 通义 / 火山方舟 都只需改 AI_BASE_URL 与 AI_MODEL。
+#   设计原则：AI 只是「锦上添花」，任何异常都退回原来的翻译摘要，
+#   绝不因为模型调用失败导致整站没有数据。
+# ============================================================
+AI_API_KEY = os.environ.get("AI_API_KEY", "").strip()
+AI_BASE_URL = (os.environ.get("AI_BASE_URL") or "https://api.deepseek.com/v1").rstrip("/")
+AI_MODEL = os.environ.get("AI_MODEL") or "deepseek-flash"
+AI_BATCH = 15          # 每批发多少条，太大容易超时、太小浪费请求
+AI_WORKERS = 3         # 并发批次数
+_AI_USAGE = []         # 记录 token 用量，便于核对花费
+
+AI_SYS_PROMPT = (
+    "你是科技新闻编辑。把每条英文新闻压缩成一句中文摘要，不超过 55 个汉字。\n"
+    "硬性要求：\n"
+    "1. 产品名、模型名、公司名保留英文原文，绝不翻译（如 GPT-6、Gemini Omni 1.2 Flash、Anthropic）\n"
+    "2. 说清「发布了什么 / 发生了什么 / 有什么影响」，禁止出现「文本」「该文章」「本文」这类空话\n"
+    "3. 不加评价、不标题党、不用感叹号\n"
+    '4. 只输出 JSON，格式：{"items":[{"id":1,"summary":"..."}]}'
+)
+
+
+def _ai_one(batch):
+    """一次模型调用，返回 {url: 中文摘要}"""
+    lines = []
+    for i, it in enumerate(batch, 1):
+        body = first_sentence(re.sub(r"\s+", " ", it.get("summary") or ""), 400)
+        lines.append(f'[{i}] 标题：{it["title"]}\n正文：{body or "(无正文)"}')
+    r = requests.post(
+        AI_BASE_URL + "/chat/completions",
+        headers={"Authorization": "Bearer " + AI_API_KEY,
+                 "Content-Type": "application/json"},
+        json={
+            "model": AI_MODEL,
+            "messages": [
+                {"role": "system", "content": AI_SYS_PROMPT},
+                {"role": "user", "content": "\n\n".join(lines)},
+            ],
+            "temperature": 0.3,
+            "response_format": {"type": "json_object"},
+        },
+        timeout=90,
+    )
+    r.raise_for_status()
+    j = r.json()
+    u = j.get("usage") or {}
+    _AI_USAGE.append((u.get("prompt_tokens", 0), u.get("completion_tokens", 0)))
+
+    out = {}
+    for row in json.loads(j["choices"][0]["message"]["content"]).get("items", []):
+        try:
+            k = int(row["id"]) - 1
+            s = clean(str(row.get("summary", ""))).strip()
+            if 0 <= k < len(batch) and len(s) >= 8:
+                out[batch[k]["url"]] = truncate_cn(s, 55, hard=64, ratio=0.7)
+        except Exception:
+            continue
+    return out
+
+
+def ai_briefs(items, cache):
+    """并发批量生成摘要。失败只影响该批，返回已成功的部分。"""
+    if not AI_API_KEY or not items:
+        return {}
+
+    hit, todo = {}, []
+    for it in items:
+        ck = "ai|" + (it.get("title") or "")[:80]
+        if cache.get(ck):
+            hit[it["url"]] = cache[ck]
+        else:
+            todo.append(it)
+    if hit:
+        print(f"  [AI] 缓存命中 {len(hit)} 条（不重复花钱）")
+    if not todo:
+        return hit
+
+    batches = [todo[i:i + AI_BATCH] for i in range(0, len(todo), AI_BATCH)]
+    print(f"  [AI] {AI_MODEL} 处理 {len(todo)} 条（{len(batches)} 批 × 并发 {AI_WORKERS}）")
+    done = 0
+    with ThreadPoolExecutor(max_workers=AI_WORKERS) as ex:
+        futs = {ex.submit(_ai_one, b): b for b in batches}
+        for fu in as_completed(futs):
+            batch = futs[fu]
+            try:
+                got = fu.result()
+            except Exception as e:
+                print(f"    [AI] 一批失败，该批保留原翻译：{str(e)[:70]}")
+                continue
+            for it in batch:
+                s = got.get(it["url"])
+                if s:
+                    hit[it["url"]] = s
+                    cache["ai|" + (it.get("title") or "")[:80]] = s
+            done += len(batch)
+            print(f"    [AI] 进度 {done}/{len(todo)}", flush=True)
+
+    if _AI_USAGE:
+        pi = sum(x[0] for x in _AI_USAGE)
+        po = sum(x[1] for x in _AI_USAGE)
+        print(f"  [AI] token 用量：输入 {pi:,} / 输出 {po:,}")
+    return hit
 
 
 def fetch_rss(source):
@@ -2515,6 +2622,20 @@ def main():
             print(f"    进度 {i}/{len(todo)}（翻译 {ok_tr} / 总结 {ok_sum}）", flush=True)
     _cache_save(cache)
     print(f"  [OK] 翻译 {ok_tr} 条 / 总结 {ok_sum} 条")
+
+    # 配了 AI key 时，用模型重写摘要（覆盖 brief_sum；brief_tr 保留作为兜底）
+    ai_map = ai_briefs(todo, cache)
+    if ai_map:
+        n_ai = 0
+        for it in todo:
+            s = ai_map.get(it["url"])
+            if s:
+                it["brief_sum"] = s
+                n_ai += 1
+        _cache_save(cache)
+        print(f"  [AI] 摘要已升级 {n_ai}/{len(todo)} 条")
+    else:
+        print("  [AI] 未启用（没有配置 AI_API_KEY），沿用翻译摘要")
     # summary 字段只用于生成附注，不进最终数据，减小体积
     for it in news:
         it.pop("summary", None)

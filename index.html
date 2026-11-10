@@ -164,6 +164,35 @@
   .bili-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
 
   .empty { padding: 40px; text-align: center; color: var(--muted); font-size: 14px; }
+
+  /* ---------- 站内搜索 ---------- */
+  .search-row { display: flex; gap: 8px; margin: 14px 0 4px; }
+  .search-row input {
+    flex: 1; min-width: 0; padding: 10px 14px; font-size: 14px; font-family: inherit;
+    border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--text);
+    outline: none; transition: border-color .2s, box-shadow .2s;
+  }
+  .search-row input::placeholder { color: #9ca3af; }
+  /* 去掉浏览器自带的 ×，避免和右侧「清除」按钮重复 */
+  .search-row input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+  .search-row input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+  .search-row .clear-btn {
+    padding: 0 15px; border: 1px solid var(--line); background: #fff; border-radius: 10px;
+    color: var(--muted); font-size: 13px; font-family: inherit; cursor: pointer; display: none;
+  }
+  .search-row .clear-btn:hover { color: var(--text); border-color: #cbd5e1; }
+  body.searching .search-row .clear-btn { display: block; }
+
+  #sec-search { display: none; }
+  body.searching #sec-search { display: block !important; }
+  body.searching .sec { display: none !important; }
+
+  .sr-tag { font-size: 11px; padding: 2px 7px; border-radius: 4px; background: #eff6ff;
+            color: #2563eb; flex-shrink: 0; white-space: nowrap; }
+  .hot-list mark { background: #fef08a; color: inherit; padding: 0 1px; border-radius: 2px; }
+  .sr-empty { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
+  .sr-tip { font-size: 12px; color: #9ca3af; margin-top: 6px; }
+
   footer { text-align: center; color: #9ca3af; font-size: 12px; margin-top: 40px; }
 </style>
 </head>
@@ -184,6 +213,23 @@
     <button data-sec="sec-politics">政治新闻</button>
     <button data-sec="sec-games">游戏资讯</button>
   </nav>
+
+  <!-- 站内搜索：跨全部板块检索，结果按热度排序 -->
+  <div class="search-row">
+    <input id="searchInput" type="search" autocomplete="off"
+           placeholder="搜索全部板块，如 GPT、英伟达、总决赛、央行（按 / 快速定位）">
+    <button class="clear-btn" id="searchClear">清除</button>
+  </div>
+
+  <section class="sec" id="sec-search">
+    <h2 class="section-title">搜索结果 <span id="searchCount"></span></h2>
+    <div class="card">
+      <ul class="hot-list" id="searchList"></ul>
+      <div class="sr-empty" id="searchEmpty" style="display:none">
+        没有找到匹配的内容，换个关键词试试（支持空格分隔多个词，需同时命中）
+      </div>
+    </div>
+  </section>
 
   <!-- AI 新闻 -->
   <section class="sec active" id="sec-ai">
@@ -530,6 +576,128 @@
   if (polTypes.length) { renderPolTabs(); renderPol(); }
 
   // ---------- 每周热点已并入上方 aiFilters 的「每周热点」标签，由 renderNews 处理 ----------
+
+  // ============================================================
+  // 站内搜索：把六个板块摊平成一张索引，跨板块检索，结果按热度排序
+  // ============================================================
+  var SEARCH_IDX = null;
+
+  function buildSearchIndex() {
+    if (SEARCH_IDX) return SEARCH_IDX;
+    var out = [];
+    function push(list, sec, cat) {
+      (list || []).forEach(function (it, i) {
+        if (!it || !it.title) return;
+        out.push({
+          t: it.title,
+          u: it.url || "",
+          s: it.source || "",
+          tm: it.time || "",
+          // 有真实热度的用热度；榜单类没有热度字段，用榜单位次折算一个分
+          h: typeof it.heat === "number" ? it.heat : Math.max(35, 72 - i * 2),
+          sec: sec,
+          cat: cat || "",
+          d: it.brief_sum || it.desc || ""
+        });
+      });
+    }
+    push(DATA.news, "AI 新闻");
+    Object.keys(DATA.hot || {}).forEach(function (k) { push(DATA.hot[k], "时事热点", k); });
+    Object.keys(DATA.finance || {}).forEach(function (k) { push(DATA.finance[k], "财经新闻", k); });
+    Object.keys(DATA.sports || {}).forEach(function (k) { push(DATA.sports[k], "体育新闻", k); });
+    Object.keys(DATA.politics || {}).forEach(function (k) { push(DATA.politics[k], "政治新闻", k); });
+    Object.keys(DATA.games || {}).forEach(function (k) { push(DATA.games[k], "游戏资讯", k); });
+    SEARCH_IDX = out;
+    return out;
+  }
+
+  function highlight(html, terms) {
+    // html 已转义，直接对纯文本做标记替换
+    terms.forEach(function (w) {
+      if (!w) return;
+      var safe = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      try {
+        html = html.replace(new RegExp("(" + safe + ")", "gi"), "<mark>$1</mark>");
+      } catch (e) { /* 极端字符忽略 */ }
+    });
+    return html;
+  }
+
+  function runSearch(q) {
+    var terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return [];
+    var hits = buildSearchIndex().filter(function (x) {
+      var hay = (x.t + " " + x.d + " " + x.cat + " " + x.s).toLowerCase();
+      return terms.every(function (w) { return hay.indexOf(w) >= 0; });
+    });
+    hits.sort(function (a, b) { return b.h - a.h || a.t.length - b.t.length; });
+    return hits;
+  }
+
+  var searchTimer = null;
+  function doSearch() {
+    var input = document.getElementById("searchInput");
+    var q = input.value.trim();
+    var countEl = document.getElementById("searchCount");
+    var listEl = document.getElementById("searchList");
+    var emptyEl = document.getElementById("searchEmpty");
+
+    if (!q) {
+      document.body.classList.remove("searching");
+      countEl.textContent = "";
+      listEl.innerHTML = "";
+      emptyEl.style.display = "none";
+      return;
+    }
+
+    var hits = runSearch(q);
+    var terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+    document.body.classList.add("searching");
+    countEl.textContent = "（" + hits.length + " 条）";
+
+    if (!hits.length) {
+      listEl.innerHTML = "";
+      emptyEl.style.display = "block";
+      return;
+    }
+    emptyEl.style.display = "none";
+
+    var MAX = 100;
+    listEl.innerHTML = hits.slice(0, MAX).map(function (x, i) {
+      var tag = x.sec + (x.cat && x.cat !== x.sec ? "·" + x.cat : "");
+      return '<li><span class="rank">' + (i + 1) + "</span>" +
+        '<span class="sr-tag">' + escapeHtml(tag) + "</span>" +
+        '<a href="' + escapeHtml(x.u) + '" target="_blank" rel="noopener">' +
+          highlight(escapeHtml(x.t), terms) + "</a>" +
+        (x.tm ? '<span class="bili-meta">' + escapeHtml(x.tm) + "</span>" : "") +
+        "</li>";
+    }).join("") +
+      (hits.length > MAX
+        ? '<li><span class="sr-empty" style="width:100%">仅显示前 ' + MAX + " 条，请输入更具体的关键词</span></li>"
+        : "");
+  }
+
+  document.getElementById("searchInput").addEventListener("input", function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(doSearch, 180);
+  });
+  document.getElementById("searchInput").addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { this.value = ""; doSearch(); }
+  });
+  document.getElementById("searchClear").addEventListener("click", function () {
+    document.getElementById("searchInput").value = "";
+    doSearch();
+    document.getElementById("searchInput").focus();
+  });
+  // 按 / 或 Ctrl+K 快速聚焦搜索框
+  document.addEventListener("keydown", function (e) {
+    var tag = (document.activeElement || {}).tagName;
+    if ((e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA") ||
+        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) {
+      e.preventDefault();
+      document.getElementById("searchInput").focus();
+    }
+  });
 </script>
 </body>
 </html>
