@@ -638,17 +638,20 @@ AI_WORKERS = 3         # 并发批次数
 _AI_USAGE = []         # 记录 token 用量，便于核对花费
 
 AI_SYS_PROMPT = (
-    "你是科技新闻编辑。把每条英文新闻压缩成一句中文摘要，不超过 55 个汉字。\n"
+    "你是科技新闻编辑。对每条英文新闻，输出两段中文：\n"
+    "1. translate：标题的中文翻译，保留产品名、模型名、公司名、人物的英文原文，不要加书名号或引号\n"
+    "2. summary：一句话内容总结，说清「发布了什么 / 发生了什么 / 有什么影响」\n"
     "硬性要求：\n"
-    "1. 产品名、模型名、公司名保留英文原文，绝不翻译（如 GPT-6、Gemini Omni 1.2 Flash、Anthropic）\n"
-    "2. 说清「发布了什么 / 发生了什么 / 有什么影响」，禁止出现「文本」「该文章」「本文」这类空话\n"
-    "3. 不加评价、不标题党、不用感叹号\n"
-    '4. 只输出 JSON，格式：{"items":[{"id":1,"summary":"..."}]}'
+    "- 两段都在 45 个汉字以内，越精简越好\n"
+    "- 绝不翻译专有名词：Gemini Omni 1.2 Flash、GPT-6、Anthropic、NVIDIA、Jensen Huang 等一律保留英文原样\n"
+    "- 禁止出现「文本」「该文章」「本文」这类空话，也不要复述标题\n"
+    "- 不加评价、不标题党、不用感叹号\n"
+    '- 只输出 JSON，格式：{"items":[{"id":1,"translate":"...","summary":"..."}]}'
 )
 
 
 def _ai_one(batch):
-    """一次模型调用，返回 {url: 中文摘要}"""
+    """一次模型调用，返回 {url: {"tr": 标题翻译, "sm": 内容总结}}"""
     lines = []
     for i, it in enumerate(batch, 1):
         body = first_sentence(re.sub(r"\s+", " ", it.get("summary") or ""), 400)
@@ -677,24 +680,34 @@ def _ai_one(batch):
     for row in json.loads(j["choices"][0]["message"]["content"]).get("items", []):
         try:
             k = int(row["id"]) - 1
-            s = clean(str(row.get("summary", ""))).strip()
-            if 0 <= k < len(batch) and len(s) >= 8:
-                out[batch[k]["url"]] = truncate_cn(s, 55, hard=64, ratio=0.7)
+            if not (0 <= k < len(batch)):
+                continue
+            tr = clean(str(row.get("translate", ""))).strip()
+            sm = clean(str(row.get("summary", ""))).strip()
+            rec = {}
+            if len(tr) >= 5:
+                rec["tr"] = truncate_cn(tr, 52, hard=60, ratio=0.7)
+            if len(sm) >= 8:
+                rec["sm"] = truncate_cn(sm, 58, hard=66, ratio=0.7)
+            if rec:
+                out[batch[k]["url"]] = rec
         except Exception:
             continue
     return out
 
 
 def ai_briefs(items, cache):
-    """并发批量生成摘要。失败只影响该批，返回已成功的部分。"""
+    """并发批量生成「标题翻译 + 内容总结」。失败只影响该批，返回已成功的部分。"""
     if not AI_API_KEY or not items:
         return {}
 
     hit, todo = {}, []
     for it in items:
-        ck = "ai|" + (it.get("title") or "")[:80]
-        if cache.get(ck):
-            hit[it["url"]] = cache[ck]
+        # ai2 前缀：旧版只存了一句摘要，格式不同，直接不复用
+        ck = "ai2|" + (it.get("title") or "")[:80]
+        val = cache.get(ck)
+        if isinstance(val, dict) and (val.get("tr") or val.get("sm")):
+            hit[it["url"]] = val
         else:
             todo.append(it)
     if hit:
@@ -715,10 +728,10 @@ def ai_briefs(items, cache):
                 print(f"    [AI] 一批失败，该批保留原翻译：{str(e)[:70]}")
                 continue
             for it in batch:
-                s = got.get(it["url"])
-                if s:
-                    hit[it["url"]] = s
-                    cache["ai|" + (it.get("title") or "")[:80]] = s
+                rec = got.get(it["url"])
+                if rec:
+                    hit[it["url"]] = rec
+                    cache["ai2|" + (it.get("title") or "")[:80]] = rec
             done += len(batch)
             print(f"    [AI] 进度 {done}/{len(todo)}", flush=True)
 
@@ -2623,17 +2636,20 @@ def main():
     _cache_save(cache)
     print(f"  [OK] 翻译 {ok_tr} 条 / 总结 {ok_sum} 条")
 
-    # 配了 AI key 时，用模型重写摘要（覆盖 brief_sum；brief_tr 保留作为兜底）
+    # 配了 AI key 时，用模型重写「标题翻译 + 内容摘要」（同时覆盖 brief_tr 和 brief_sum）
     ai_map = ai_briefs(todo, cache)
     if ai_map:
-        n_ai = 0
+        n_tr = n_sm = 0
         for it in todo:
-            s = ai_map.get(it["url"])
-            if s:
-                it["brief_sum"] = s
-                n_ai += 1
+            rec = ai_map.get(it["url"]) or {}
+            if rec.get("tr"):
+                it["brief_tr"] = rec["tr"]
+                n_tr += 1
+            if rec.get("sm"):
+                it["brief_sum"] = rec["sm"]
+                n_sm += 1
         _cache_save(cache)
-        print(f"  [AI] 摘要已升级 {n_ai}/{len(todo)} 条")
+        print(f"  [AI] 标题翻译 {n_tr} 条 / 内容摘要 {n_sm} 条")
     else:
         print("  [AI] 未启用（没有配置 AI_API_KEY），沿用翻译摘要")
     # summary 字段只用于生成附注，不进最终数据，减小体积

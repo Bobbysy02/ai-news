@@ -79,12 +79,17 @@
   }
   .sort-box select:hover { border-color: var(--blue); color: var(--blue); }
 
-  /* 英文条目的中文附注（不截断，避免出现省略号） */
-  .brief {
-    font-size: 12.5px; color: #6b7280; line-height: 1.55; margin-top: 4px;
+  /* 英文条目的中文附注：第一行「译」标题翻译，第二行「摘要」内容总结（不截断，避免省略号） */
+  .brief { font-size: 12.5px; line-height: 1.55; margin-top: 4px; }
+  .brief .b-line { display: flex; gap: 5px; align-items: baseline; }
+  .brief .b-line + .b-line { margin-top: 1px; }
+  .brief .b-tag {
+    flex: 0 0 auto; font-style: normal; font-size: 10px; line-height: 1.7;
+    padding: 0 4px; border-radius: 3px; background: #eef2ff; color: #4f46e5;
   }
-  .brief::before { content: "译 "; color: #9ca3af; font-size: 11px; }
-  .brief.sum::before { content: "摘要 "; }
+  .brief .b-tr { color: #6b7280; }
+  .brief .b-sm { color: #374151; }
+  .brief .b-sm .b-tag { background: #ecfdf5; color: #059669; }
 
   /* 板块说明 */
   .sub-note { font-size: 12px; color: var(--muted); margin: -8px 0 12px; }
@@ -355,8 +360,15 @@
   var currentSort = "heat";
   // 英文帖子统一显示中文极简摘要（页面上不再提供切换）
   function briefHtml(n) {
-    if (!n.brief_sum) return "";
-    return '<div class="brief sum">' + escapeHtml(n.brief_sum) + "</div>";
+    var tr = (n.brief_tr || "").trim();
+    var sm = (n.brief_sum || "").trim();
+    if (!tr && !sm) return "";
+    var h = '<div class="brief">';
+    // 第一行：标题的中文翻译（保留英文专名，避免「Flash → 闪光灯」这类误译）
+    if (tr) h += '<div class="b-line b-tr"><i class="b-tag">译</i><span>' + escapeHtml(tr) + "</span></div>";
+    // 第二行：正文内容总结
+    if (sm) h += '<div class="b-line b-sm"><i class="b-tag">摘要</i><span>' + escapeHtml(sm) + "</span></div>";
+    return h + "</div>";
   }
 
   // 按来源分组排序：组间按最高热度，组内按热度
