@@ -601,6 +601,30 @@ def truncate_cn(text, limit=48, hard=56, ratio=0.55):
     return _tidy_cn(out, floor=limit * 0.6)
 
 
+def _ai_finalize(line):
+    """AI 导语收尾：只做必要清理，不复用 truncate_cn
+
+    机器翻译的文本可以用「删掉结尾英文碎片」这类激进规则，
+    AI 导语不能——模型被要求保留 IPO、GPT-6 这类英文专名，
+    按字数删就会把「…直播谈 IPO」切成「…直播谈」。
+    """
+    s = clean(str(line)).replace("\n", " ").strip().strip("“”\"' ")
+    s = re.sub(r"\s+([，。；：、！？])", r"\1", s)
+    s = s.rstrip("，,；;、：: 　")
+    if not s:
+        return ""
+    # 模型一般会守在 40 字内；超长说明没照做，退到最近的整句/分句边界
+    if len(s) > 62:
+        m = re.search(r"[。；;！!？?]", s[:70])
+        if m and m.end() >= 15:
+            return s[:m.end()]
+        m = re.search(r"[，,、]", s[:62])
+        if m and m.end() >= 20:
+            return s[:m.end()].rstrip("，,、")
+        return s[:60].rstrip("，,；;、：: 　")
+    return s
+
+
 def build_briefs(item, cache):
     """同时产出两种方案：
        方案A brief_tr  = 标题的中文翻译
@@ -687,8 +711,9 @@ def _ai_one(batch):
             if not (0 <= k < len(batch)):
                 continue
             line = clean(str(row.get("line") or row.get("translate") or row.get("summary") or "")).strip()
+            line = _ai_finalize(line)
             if len(line) >= 5:
-                out[batch[k]["url"]] = truncate_cn(line, 52, hard=60, ratio=0.7)
+                out[batch[k]["url"]] = line
         except Exception:
             continue
     return out
@@ -701,8 +726,8 @@ def ai_briefs(items, cache):
 
     hit, todo = {}, []
     for it in items:
-        # ai3 前缀：ai2 存的是 {tr, sm} 两段，格式不同，不复用
-        ck = "ai3|" + (it.get("title") or "")[:80]
+        # ai3 前缀：ai3 存的是被截断规则损坏过的文本，格式不同，不复用
+        ck = "ai4|" + (it.get("title") or "")[:80]
         val = cache.get(ck)
         if isinstance(val, str) and len(val) >= 5:
             hit[it["url"]] = val
@@ -729,7 +754,7 @@ def ai_briefs(items, cache):
                 line = got.get(it["url"])
                 if line:
                     hit[it["url"]] = line
-                    cache["ai3|" + (it.get("title") or "")[:80]] = line
+                    cache["ai4|" + (it.get("title") or "")[:80]] = line
             done += len(batch)
             print(f"    [AI] 进度 {done}/{len(todo)}", flush=True)
 
