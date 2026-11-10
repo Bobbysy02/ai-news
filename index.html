@@ -338,6 +338,11 @@
   // ---------- 顶部大类切换 ----------
   document.getElementById("topTabs").addEventListener("click", function (e) {
     if (e.target.tagName !== "BUTTON") return;
+    // 搜索状态下点板块：先退出搜索，否则所有 .sec 被隐藏，看起来像点了没反应
+    if (document.body.classList.contains("searching")) {
+      document.getElementById("searchInput").value = "";
+      doSearch();
+    }
     var id = e.target.getAttribute("data-sec");
     document.querySelectorAll(".sec").forEach(function (s) { s.classList.remove("active"); });
     document.getElementById(id).classList.add("active");
@@ -623,14 +628,66 @@
     return html;
   }
 
+  // 中英文别名：搜「英伟达」也要能命中 NVIDIA
+  var ALIAS = {
+    "英伟达": ["nvidia"], "微软": ["microsoft"], "谷歌": ["google"], "苹果": ["apple"],
+    "亚马逊": ["amazon"], "特斯拉": ["tesla"], "台积电": ["tsmc"], "英特尔": ["intel"],
+    "超威": ["amd"], "三星": ["samsung"], "甲骨文": ["oracle"], "脸书": ["facebook", "meta"],
+    "字节": ["bytedance", "tiktok"], "阿里": ["alibaba", "alibaba cloud"], "腾讯": ["tencent"],
+    "百度": ["baidu"], "华为": ["huawei"], "小米": ["xiaomi"], "比亚迪": ["byd"],
+    "宁德时代": ["catl"], "京东": ["jd"], "美团": ["meituan"], "网易": ["netease"],
+    "商汤": ["sensetime"], "月之暗面": ["moonshot"], "智谱": ["zhipu", "glm"],
+    "通义": ["qwen"], "阿里云": ["alibaba cloud"], "华为云": ["huaweicloud"]
+  };
+
+  // 统一字符形态：全角连字符、弯引号、不换行空格，避免「GPT‑6」搜不到「GPT-6」
+  function norm(s) {
+    return String(s).toLowerCase()
+      .replace(/[\u2010-\u2015\u2212]/g, "-")
+      .replace(/[\u00a0\u3000]/g, " ")
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201c\u201d]/g, '"');
+  }
+
+  // 短英文词必须独立成词，否则搜 ai 会把 said / available / email 全命中
+  function hitTerm(hay, w) {
+    if (!/^[a-z0-9]+$/.test(w) || w.length > 3) return hay.indexOf(w) >= 0;
+    return new RegExp("(^|[^a-z0-9])" + w + "([^a-z0-9]|$)").test(hay);
+  }
+
+  // 把查询词扩展成「本身 + 中英文别名」，任一命中即可
+  function expandTerm(w) {
+    var out = [w];
+    for (var cn in ALIAS) {
+      if (!ALIAS.hasOwnProperty(cn)) continue;
+      if (w === cn || ALIAS[cn].indexOf(w) >= 0) {
+        if (out.indexOf(cn) < 0) out.push(cn);
+        ALIAS[cn].forEach(function (a) { if (out.indexOf(a) < 0) out.push(a); });
+      }
+    }
+    return out;
+  }
+
   function runSearch(q) {
-    var terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+    var terms = norm(q).split(/\s+/).filter(Boolean);
     if (!terms.length) return [];
-    var hits = buildSearchIndex().filter(function (x) {
-      var hay = (x.t + " " + x.d + " " + x.cat + " " + x.s).toLowerCase();
-      return terms.every(function (w) { return hay.indexOf(w) >= 0; });
+    var hits = [];
+    buildSearchIndex().forEach(function (x) {
+      var hayAll = norm(x.t + " " + x.d + " " + x.cat + " " + x.s);
+      var ok = terms.every(function (w) {
+        return expandTerm(w).some(function (a) { return hitTerm(hayAll, a); });
+      });
+      if (!ok) return;
+      // 标题命中优先：搜「ai」时，标题里就有 AI 的要排在「仅摘要提到」的前面
+      x.inTitle = terms.every(function (w) {
+        return expandTerm(w).some(function (a) { return hitTerm(norm(x.t), a); });
+      });
+      hits.push(x);
     });
-    hits.sort(function (a, b) { return b.h - a.h || a.t.length - b.t.length; });
+    hits.sort(function (a, b) {
+      if (a.inTitle !== b.inTitle) return a.inTitle ? -1 : 1;
+      return b.h - a.h || a.t.length - b.t.length;
+    });
     return hits;
   }
 
@@ -651,7 +708,7 @@
     }
 
     var hits = runSearch(q);
-    var terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+    var terms = norm(q).split(/\s+/).filter(Boolean);
     document.body.classList.add("searching");
     countEl.textContent = "（" + hits.length + " 条）";
 
